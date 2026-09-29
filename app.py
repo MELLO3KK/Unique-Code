@@ -15,6 +15,7 @@ Every generated code now carries a UNIQUE ID protected by a PASSCODE:
 
 from flask import Flask, render_template, request, Response, jsonify, session
 
+import brands
 import codes
 import dmcode
 
@@ -26,6 +27,16 @@ app.secret_key = codes.load_secret_key()
 def index():
     return render_template(
         "index.html",
+        styles=dmcode.STYLES,
+        max_bytes=dmcode.MAX_TEXT_BYTES,
+    )
+
+
+@app.route("/brands")
+def brands_home():
+    """The social feed: every business brand account and its product codes."""
+    return render_template(
+        "brands.html",
         styles=dmcode.STYLES,
         max_bytes=dmcode.MAX_TEXT_BYTES,
     )
@@ -118,6 +129,177 @@ def verify_passcode(uid):
         return jsonify(ok=False, error=msg), 404 if "exists" in msg else 403
     session.setdefault("owned_codes", {})[uid] = True
     return jsonify(ok=True)
+
+
+# --------------------------------------------------------------------------
+# Business-brand accounts + product codes + customer copies (API)
+# --------------------------------------------------------------------------
+def _brand_status(msg: str) -> int:
+    m = msg.lower()
+    if "exists" in m or "no brand" in m or "no product" in m:
+        return 404
+    if "passcode" in m:
+        return 403
+    return 400
+
+
+@app.get("/api/brands")
+def list_brands():
+    """The social directory: every business brand account on the platform."""
+    return jsonify(brands.store.list_brands())
+
+
+@app.post("/api/brands")
+def create_brand():
+    """A business brand creates its account. Its passcode is returned ONCE."""
+    body = request.get_json(silent=True) or {}
+    try:
+        rec = brands.store.create_brand(
+            handle=body.get("handle", ""),
+            name=body.get("name", ""),
+            bio=body.get("bio", ""),
+            category=body.get("category", ""),
+            style=body.get("style", "classic"),
+        )
+    except brands.BrandError as exc:
+        return jsonify(error=str(exc)), _brand_status(str(exc))
+    session.setdefault("owned_brands", {})[rec["handle"]] = True
+    return jsonify(rec), 201
+
+
+@app.get("/api/brands/<handle>")
+def get_brand(handle):
+    """Public brand profile + its product codes."""
+    try:
+        rec = brands.store.get_brand(handle)
+        rec["products"] = brands.store.list_products(handle)
+    except brands.BrandError as exc:
+        return jsonify(error=str(exc)), 404
+    rec["you_own_it"] = bool(session.get("owned_brands", {}).get(rec["handle"]))
+    return jsonify(rec)
+
+
+@app.post("/api/brands/<handle>/login")
+def login_brand(handle):
+    """Verify a brand's passcode (throttled). Grants management rights in this browser."""
+    body = request.get_json(silent=True) or {}
+    try:
+        rec = brands.store.verify_brand(handle, body.get("passcode", ""), ip=_client_ip())
+    except brands.BrandError as exc:
+        return jsonify(ok=False, error=str(exc)), _brand_status(str(exc))
+    session.setdefault("owned_brands", {})[rec["handle"]] = True
+    return jsonify(ok=True, brand=rec)
+
+
+@app.post("/api/brands/<handle>/change")
+def change_brand(handle):
+    """Update the brand profile — the brand's passcode is REQUIRED."""
+    body = request.get_json(silent=True) or {}
+    try:
+        rec = brands.store.update_brand(
+            handle,
+            passcode=body.get("passcode", ""),
+            name=body.get("name"),
+            bio=body.get("bio"),
+            category=body.get("category"),
+            style=body.get("style"),
+            new_passcode=body.get("new_passcode"),
+            ip=_client_ip(),
+        )
+    except brands.BrandError as exc:
+        return jsonify(error=str(exc)), _brand_status(str(exc))
+    session.setdefault("owned_brands", {})[rec["handle"]] = True
+    return jsonify(rec)
+
+
+@app.post("/api/brands/<handle>/products")
+def create_product(handle):
+    """The brand creates a product code (QR-look-alike). Brand passcode required."""
+    body = request.get_json(silent=True) or {}
+    try:
+        rec = brands.store.create_product(
+            handle,
+            passcode=body.get("passcode", ""),
+            message=body.get("message", ""),
+            title=body.get("title", ""),
+            style=body.get("style"),
+            ip=_client_ip(),
+        )
+    except brands.BrandError as exc:
+        return jsonify(error=str(exc)), _brand_status(str(exc))
+    return jsonify(rec), 201
+
+
+@app.get("/api/products/<pid>")
+def get_product(pid):
+    """Public info about one product code (brand original or customer copy)."""
+    try:
+        rec = brands.store.get_product(pid)
+    except brands.BrandError as exc:
+        return jsonify(error=str(exc)), 404
+    if not rec["is_copy"]:
+        rec["copies"] = brands.store.list_copies(pid)
+    return jsonify(rec)
+
+
+@app.post("/api/products/<pid>/change")
+def change_product(pid):
+    """Change a product code — requires that code's own passcode."""
+    body = request.get_json(silent=True) or {}
+    try:
+        rec = brands.store.get_product(pid)
+        if rec["is_copy"]:
+            out = brands.store.update_copy(
+                pid,
+                passcode=body.get("passcode", ""),
+                message=body.get("message"),
+                style=body.get("style"),
+                customer=body.get("customer"),
+                ip=_client_ip(),
+            )
+        else:
+            out = brands.store.update_product(
+                pid,
+                passcode=body.get("passcode", ""),
+                message=body.get("message"),
+                title=body.get("title"),
+                style=body.get("style"),
+                ip=_client_ip(),
+            )
+    except brands.BrandError as exc:
+        return jsonify(error=str(exc)), _brand_status(str(exc))
+    return jsonify(out)
+
+
+@app.post("/api/products/<pid>/copy")
+def claim_copy(pid):
+    """A CUSTOMER makes their OWN version of a brand's product code.
+
+    Returns a brand-new personal unique ID + passcode linked to the product.
+    """
+    body = request.get_json(silent=True) or {}
+    try:
+        rec = brands.store.claim_copy(
+            pid, customer=body.get("customer", ""), style=body.get("style")
+        )
+    except brands.BrandError as exc:
+        return jsonify(error=str(exc)), _brand_status(str(exc))
+    return jsonify(rec), 201
+
+
+@app.get("/p/<pid>.png")
+@app.get("/p/<pid>")
+def product_image(pid):
+    """Render the Data Matrix PNG for a product code or a customer's personal copy."""
+    try:
+        rec = brands.store.get_product(pid)
+    except brands.BrandError as exc:
+        return Response(str(exc), status=404, mimetype="text/plain")
+    try:
+        img = dmcode.generate(rec["id"], style=rec.get("style", "classic"), scale=10)
+    except dmcode.DMCodeError as exc:
+        return Response(str(exc), status=400, mimetype="text/plain")
+    return Response(dmcode.to_png_bytes(img), mimetype="image/png")
 
 
 @app.route("/image")

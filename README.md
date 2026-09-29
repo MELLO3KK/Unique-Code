@@ -44,6 +44,26 @@ python3 app.py            # serves http://localhost:5000
 | `/api/codes/<id>/change` | POST | JSON `{passcode, message?, owner?, style?, new_passcode?}` — **passcode required**; 403 if missing/wrong |
 | `/api/codes/<id>/verify` | POST | JSON `{passcode}` → `{ok:true}` without changing anything |
 
+## Brand Network (social-style business accounts) — `/brands`
+
+Like a social media app: **every business brand creates its own account**, the
+brand publishes **product codes**, and **customers of that brand can make their
+own copy** of any product code (their own unique ID + personal passcode).
+
+| Route | Method | Description |
+|-------|--------|-------------|
+| `/brands` | GET | Web UI: brand sign-up, brand management, customer copies, public brand feed |
+| `/api/brands` | GET | Directory of all brand accounts |
+| `/api/brands` | POST | JSON `{handle, name, bio?, category?, style?}` → creates the brand account, returns its **passcode once** |
+| `/api/brands/<handle>` | GET | Public profile + its product codes |
+| `/api/brands/<handle>/login` | POST | JSON `{passcode}` → verifies the brand's passcode (throttled) |
+| `/api/brands/<handle>/change` | POST | JSON `{passcode, name?, bio?, category?, style?, new_passcode?}` — brand passcode required |
+| `/api/brands/<handle>/products` | POST | JSON `{passcode, message, title?, style?}` → brand creates a product code; returns product ID + its passcode once |
+| `/api/products/<id>` | GET | Public info about a product code or a customer's personal copy (`is_copy`, `copies[]`) |
+| `/api/products/<id>/copy` | POST | JSON `{customer?, style?}` → **customer makes their OWN copy** of a brand product code; returns a new personal ID + passcode (shown once) |
+| `/api/products/<id>/change` | POST | JSON `{passcode, ...}` → change a product (brand's product passcode) or a personal copy (customer's own passcode); 403 otherwise |
+| `/p/<id>.png` | GET | Data Matrix PNG whose payload IS that product/copy ID |
+
 Example:
 
 ```bash
@@ -65,6 +85,29 @@ curl -s -X POST localhost:5000/api/codes/rL0bxredbIzNDX1M/change \
 curl -s -X POST localhost:5000/api/codes/rL0bxredbIzNDX1M/change \
      -H 'Content-Type: application/json' \
      -d '{"passcode":"DDBGP59U9K","message":"updated by alice"}'
+
+# --- Brand Network: brand account -> product code -> customer's own copy ---
+
+# 1) A business brand creates its social-style account (passcode shown once)
+curl -s -X POST localhost:5000/api/brands -H 'Content-Type: application/json' \
+     -d '{"handle":"coffee_roasters","name":"Coffee Roasters Co.","category":"Food & Drink"}'
+# -> {"handle":"coffee_roasters",...,"passcode":"NLEY3BX0UD"}
+
+# 2) The brand publishes a product code (brand passcode required)
+curl -s -X POST localhost:5000/api/brands/coffee_roasters/products \
+     -H 'Content-Type: application/json' \
+     -d '{"passcode":"NLEY3BX0UD","title":"Signature Blend 250g","message":"https://shop.example.com/signature-blend"}'
+# -> {"id":"qKHerQBjMSuFkcb3","passcode":"C7EGSI0PW4",...}   /p/qKHerQBjMSuFkcb3.png is printable
+
+# 3) A CUSTOMER of that brand makes their OWN copy of the product code
+curl -s -X POST localhost:5000/api/products/qKHerQBjMSuFkcb3/copy \
+     -H 'Content-Type: application/json' -d '{"customer":"bob","style":"ocean"}'
+# -> {"id":"VNZwLgRk3X4IqEOa","passcode":"37XL5VAE49","is_copy":true,...}
+
+# 4) Only bob's own passcode can change bob's copy (even the brand cannot)
+curl -s -X POST localhost:5000/api/products/VNZwLgRk3X4IqEOa/change \
+     -H 'Content-Type: application/json' \
+     -d '{"passcode":"37XL5VAE49","message":"https://shop.example.com/bobs-blend"}'
 ```
 
 ## Why it's not a QR code
