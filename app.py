@@ -17,10 +17,16 @@ from flask import (Flask, render_template, request, Response, jsonify,
                    session, redirect)
 from urllib.parse import quote
 
+import csv
+import os
+import time
+import io
+
 import brands
 import codes
 import dmcode
 import authenticity
+import scans
 
 app = Flask(__name__)
 app.secret_key = codes.load_secret_key()
@@ -28,11 +34,29 @@ app.secret_key = codes.load_secret_key()
 
 @app.route("/")
 def index():
+    """The customer-facing home: scan a brand's product code as proof of purchase."""
+    return render_template(
+        "home.html",
+        styles=dmcode.STYLES,
+        max_bytes=dmcode.MAX_TEXT_BYTES,
+    )
+
+
+@app.route("/create")
+def create_page():
+    """Legacy free-code creator (kept so old links keep working)."""
     return render_template(
         "index.html",
         styles=dmcode.STYLES,
         max_bytes=dmcode.MAX_TEXT_BYTES,
     )
+
+
+@app.route("/style.css")
+def style_css():
+    """The shared Twitter/X-style dark theme for every page."""
+    css_path = os.path.join(app.root_path, "templates", "theme.css")
+    return Response(open(css_path, encoding="utf-8").read(), mimetype="text/css")
 
 
 @app.route("/brands")
@@ -318,7 +342,11 @@ def verify_page(serial=""):
 
 @app.post("/api/verify")
 def api_verify():
-    """Verify a product: serial (from the scanned code) + printed passcode."""
+    """Verify a product: serial (from the scanned code) + printed passcode.
+
+    Every attempt is saved to the permanent scan ledger (``scan_records.json``)
+    so brands have a full record of who scanned/bought their products.
+    """
     body = request.get_json(silent=True) or {}
     try:
         verdict = authenticity.store.verify(
@@ -329,8 +357,25 @@ def api_verify():
     except authenticity.AuthenticityError as exc:
         msg = str(exc)
         status = 404 if "exists" in msg else 400
+        scans.store.log(serial=body.get("serial", ""), brand=None,
+                        result="ERROR", authentic=False, message=msg,
+                        customer=body.get("customer", ""), ip=_client_ip(),
+                        device=request.headers.get("User-Agent", ""))
         return jsonify(result="ERROR", authentic=False, error=msg, message=msg), status
-    status = 200 if verdict["result"] in ("AUTHENTIC", "AUTHENTIC_BUT_RESELLER") else 403
+
+    # A genuine unit that was already proven purchased elsewhere -> ALREADY_USED
+    if verdict["result"] == "AUTHENTIC_BUT_RESELLER":
+        verdict["result"] = "ALREADY_USED"
+        verdict["authentic"] = True  # the code itself is genuine, but resold/cloned
+
+    unit = verdict.get("unit") or {}
+    scans.store.log(serial=body.get("serial", ""), brand=unit.get("brand"),
+                    result=verdict["result"], authentic=verdict["authentic"],
+                    message=verdict["message"],
+                    customer=body.get("customer", ""), ip=_client_ip(),
+                    device=request.headers.get("User-Agent", ""))
+
+    status = 200 if verdict["result"] in ("AUTHENTIC", "ALREADY_USED") else 403
     return jsonify(verdict), status
 
 
@@ -391,6 +436,66 @@ def brand_units(handle):
     for u in units:
         u.pop("last_verified", None)  # keep customer privacy on the public list
     return jsonify({"summary": authenticity.store.brand_summary(handle), "units": units})
+
+
+@app.post("/api/brands/<handle>/scans")
+def brand_scans(handle):
+    """The brand's FULL scan/purchase ledger — brand passcode required.
+
+    Without a valid passcode only aggregate stats and the last few serials
+    are released; the complete history (who, IP, device) is private to the
+    brand.
+    """
+    body = request.get_json(silent=True) or {}
+    key = handle.lstrip("@").lower()
+    rows = scans.store.list_for_brand(key)
+    out = {"brand": key, "stats": scans.store.stats_for_brand(key),
+           "authenticated": False}
+    try:
+        brands.store.verify_brand(handle, body.get("passcode", ""), ip=_client_ip())
+    except brands.BrandError as exc:
+        out["recent"] = [{"at": r["at"], "serial": r["serial"], "result": r["result"]}
+                         for r in rows[:5]]
+        out["locked"] = str(exc)
+        return jsonify(out), 200
+    out["authenticated"] = True
+    out["scans"] = rows
+    return jsonify(out)
+
+
+@app.get("/api/brands/<handle>/recent-scans")
+def brand_recent_scans(handle):
+    """Public 'recent purchase proofs' ticker for a brand (no customer PII)."""
+    key = handle.lstrip("@").lower()
+    rows = []
+    for r in scans.store.list_for_brand(key)[:8]:
+        if r["result"] in ("AUTHENTIC", "ALREADY_USED"):
+            rows.append({"at": r["at"], "serial": r["serial"],
+                         "customer": r.get("customer"), "result": r["result"]})
+    return jsonify({"stats": scans.store.stats_for_brand(key), "recent": rows})
+
+
+@app.get("/api/brands/<handle>/scans.csv")
+def brand_scans_csv(handle):
+    """Same ledger as a CSV download (for spreadsheets / accounting)."""
+    key = handle.lstrip("@").lower()
+    owned = session.get("owned_brands", {}).get(key)
+    if not owned:
+        return jsonify(error="Log in as this brand first (passcode required)."), 403
+    fieldnames = ["at", "serial", "title", "result", "authentic",
+                  "customer", "ip", "device", "message"]
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=fieldnames, extrasaction="ignore")
+    writer.writeheader()
+    titles = {u["serial"]: u.get("title", "")
+              for u in authenticity.store.list_for_brand(key)}
+    for row in scans.store.list_for_brand(key, limit=100_000):
+        row = dict(row)
+        row["title"] = titles.get(row.get("serial", ""), "")
+        row["at"] = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(row.get("at", 0)))
+        writer.writerow(row)
+    return Response(buf.getvalue(), mimetype="text/csv", headers={
+        "Content-Disposition": f"attachment; filename={key}-scans.csv"})
 
 
 @app.get("/a/<serial>.png")

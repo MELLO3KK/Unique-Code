@@ -1,0 +1,13 @@
+{
+  "testco": {
+    "handle": "testco",
+    "name": "Test Co",
+    "bio": "",
+    "category": "",
+    "style": "classic",
+    "salt": "3cc7f0e2e4a3476f2bea9e3e1e6ca39d",
+    "passcode_hash": "4bccf9b78e42c60efb5226587c6597f05f93212243a3d749c5d2eed2367086d1",
+    "created": 1790713076.134123,
+    "modified": 1790713076.1341236
+  }
+}

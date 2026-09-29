@@ -3,192 +3,114 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Brand Network — business accounts & product codes</title>
+<title>Brands — Proven</title>
+<link rel="stylesheet" href="/style.css">
 <style>
-  :root {
-    --ink: #1a237e;
-    --bg: #f4f6fb;
-    --card: #ffffff;
-    --accent: #4353ff;
-    --muted: #6b7280;
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    background: var(--bg);
-    color: #111827;
-  }
-  header {
-    background: linear-gradient(135deg, #1a237e, #4353ff);
-    color: white;
-    padding: 34px 20px 30px;
-    text-align: center;
-  }
-  header h1 { margin: 0 0 8px; font-size: 1.9rem; letter-spacing: .3px; }
-  header p { margin: 0 auto; max-width: 680px; opacity: .9; font-size: .98rem; }
-  header nav { margin-top: 14px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
-  header nav a {
-    color: white; text-decoration: none; font-weight: 600; font-size: .9rem;
-    padding: 7px 16px; border-radius: 999px; background: rgba(255,255,255,.16);
-  }
-  header nav a.active, header nav a:hover { background: rgba(255,255,255,.32); }
-  main {
-    max-width: 1080px; margin: -20px auto 40px; padding: 0 16px;
-    display: grid; grid-template-columns: 380px 1fr; gap: 20px;
-    align-items: start;
-  }
-  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
-  .card {
-    background: var(--card); border-radius: 14px; padding: 22px;
-    box-shadow: 0 8px 24px rgba(20, 30, 90, .08);
-  }
-  label { display: block; font-weight: 600; margin: 14px 0 6px; }
-  input[type=text], input[type=password], textarea, select {
-    width: 100%; padding: 10px 12px; border: 1.5px solid #d6dae6; border-radius: 10px;
-    font-size: 1rem; font-family: inherit; background: white;
-  }
-  textarea { min-height: 76px; resize: vertical; }
-  input:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent); }
-  button.primary {
-    margin-top: 18px; width: 100%; padding: 13px;
-    font-size: 1.05rem; font-weight: 700; color: white;
-    background: var(--accent); border: none; border-radius: 10px; cursor: pointer;
-  }
-  button.primary:hover { filter: brightness(1.08); }
-  button.small {
-    padding: 7px 14px; font-size: .88rem; font-weight: 700; color: var(--accent);
-    background: white; border: 2px solid var(--accent); border-radius: 9px; cursor: pointer;
-  }
-  button.small:hover { background: #eef1ff; }
-  .subtabs { display: flex; gap: 8px; margin-bottom: 4px; flex-wrap: wrap; }
-  .subtabs button {
-    flex: 1; padding: 9px 6px; border: 1.5px solid #d6dae6; border-radius: 9px;
-    background: #f7f8fd; font-weight: 600; cursor: pointer; font-size: .9rem; min-width: 120px;
-  }
-  .subtabs button.active { background: var(--accent); border-color: var(--accent); color: white; }
-  #status { margin-top: 12px; font-size: .92rem; min-height: 1.2em; line-height: 1.4; }
-  #status.ok { color: #0a7d33; }
-  #status.err { color: #c62828; }
-  .codebox {
-    margin-top: 12px; padding: 12px 14px; border-radius: 10px; background: #eef1ff;
-    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; word-break: break-all;
-    font-size: .92rem; line-height: 1.5;
-  }
-  .codebox b { color: var(--ink); }
-  .warn { background: #fff7e0 !important; }
-  .hint-small { font-size: .8rem; color: var(--muted); margin-top: 6px; line-height: 1.45; }
-  /* feed */
-  .brand {
-    border: 1.5px solid #e3e7f2; border-radius: 12px; padding: 16px; margin-bottom: 16px;
-    background: #fcfdff;
-  }
-  .brand-head { display: flex; gap: 12px; align-items: center; }
-  .avatar {
-    width: 46px; height: 46px; border-radius: 50%; flex: none;
-    background: linear-gradient(135deg, #1a237e, #4353ff);
-    color: white; display: flex; align-items: center; justify-content: center;
-    font-weight: 800; font-size: 1.2rem; text-transform: uppercase;
-  }
-  .brand-head h3 { margin: 0; font-size: 1.05rem; }
-  .brand-head .handle { color: var(--accent); font-weight: 700; font-size: .88rem; }
-  .brand-head .cat { color: var(--muted); font-size: .8rem; }
-  .brand .bio { font-size: .9rem; color: #374151; margin: 8px 0 0; }
-  .products { margin-top: 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
-  .product {
-    border: 1.5px solid #e3e7f2; border-radius: 10px; padding: 10px; background: white;
-    display: flex; flex-direction: column; gap: 8px;
-  }
-  .product img { width: 100%; border-radius: 8px; image-rendering: pixelated; cursor: pointer; }
-  .product .ptitle { font-weight: 700; font-size: .88rem; }
-  .product .pmeta { font-size: .75rem; color: var(--muted); font-family: ui-monospace, Menlo, monospace; word-break: break-all; }
-  .product .actions { display: flex; gap: 6px; flex-wrap: wrap; }
-  .empty { color: var(--muted); font-size: .9rem; padding: 8px 0; }
-  .modal-bg {
-    position: fixed; inset: 0; background: rgba(15,23,42,.6); display: none;
-    align-items: center; justify-content: center; z-index: 50; padding: 16px;
-  }
+  /* small page-specific helpers (theme lives in /style.css) */
+  .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.7); display: none;
+    align-items: center; justify-content: center; z-index: 100; padding: 16px; }
   .modal-bg.open { display: flex; }
-  .modal {
-    background: white; border-radius: 14px; padding: 22px; max-width: 460px; width: 100%;
-    max-height: 90vh; overflow: auto;
-  }
+  .modal { background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
+    padding: 22px; max-width: 480px; width: 100%; max-height: 90vh; overflow: auto; }
   .modal h3 { margin: 0 0 10px; }
-  .modal img { width: 100%; border-radius: 10px; image-rendering: pixelated; }
-  .modal .close { float: right; border: none; background: none; font-size: 1.3rem; cursor: pointer; color: var(--muted); }
-  footer { text-align: center; color: var(--muted); font-size: .85rem; margin-bottom: 30px; }
+  .modal img.code-full { width: 100%; border-radius: 12px; background: #fff; padding: 8px; image-rendering: pixelated; }
+  .close { float: right; border: none; background: none; font-size: 1.3rem; cursor: pointer; color: var(--muted); }
+  details summary { cursor: pointer; color: var(--accent); font-weight: 600; margin-top: 14px; }
+  .codebox {
+    margin-top: 12px; padding: 12px 14px; border-radius: 12px; background: #000;
+    border: 1px solid var(--border);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; word-break: break-all;
+    font-size: .88rem; line-height: 1.5;
+  }
+  .codebox b { color: var(--accent); }
+  .warn { border-color: #ffd40066 !important; background: #ffd40010 !important; }
 </style>
 </head>
 <body>
-<header>
-  <h1>🏷️ Brand Network</h1>
-  <p>A social-style platform for <strong>business brands</strong>: every brand creates its own
-     account, publishes scannable <strong>product codes</strong> (QR look-alikes), and customers of
-     that brand can make <strong>their own copy</strong> of any product code — protected by a personal passcode.</p>
-  <nav>
-    <a href="/">⚡ Solo DM Codes</a>
-    <a href="/brands" class="active">🏷️ Brand Network</a>
-    <a href="/verify">🔍 Verify a product</a>
-  </nav>
-</header>
 
-<main>
-  <!-- ==================== LEFT: actions ==================== -->
-  <section class="card">
-    <div class="subtabs">
-      <button type="button" id="tab-signup" class="active" onclick="showTab('signup')">Sign up as a brand</button>
-      <button type="button" id="tab-login" onclick="showTab('login')">Manage my brand</button>
-      <button type="button" id="tab-copy" onclick="showTab('copy')">I'm a customer</button>
+<nav class="topbar">
+  <a class="logo" href="/">
+    <svg viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 15.5l-4-4 1.41-1.41L10 13.67l6.59-6.59L18 8.5l-8 8z"/></svg>
+    Proven
+  </a>
+  <div class="spacer"></div>
+</nav>
+
+<div class="shell">
+  <aside class="nav">
+    <a href="/">
+      <svg viewBox="0 0 24 24"><path d="M12 3L2 12h3v8h6v-6h2v6h6v-8h3L12 3z"/></svg> Scan &amp; Verify
+    </a>
+    <a href="/brands" class="active">
+      <svg viewBox="0 0 24 24"><path d="M4 4h7v7H4V4zm9 0h7v7h-7V4zM4 13h7v7H4v-7zm9 0h7v7h-7v-7z"/></svg> Brands
+    </a>
+    <a href="/verify">
+      <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 10-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1114 9.5 4.5 4.5 0 019.5 14z"/></svg> Verify a product
+    </a>
+    <button class="post-btn" onclick="showTab('signup')">Create brand account</button>
+  </aside>
+
+  <main class="feed">
+    <div class="page-head">
+      <h1>Brand Network</h1>
+      <p class="sub">Business brands create an account here — <strong>only brands can generate product codes</strong>. Customers scan those codes on the homepage as proof of purchase.</p>
+      <div class="tabs">
+        <button type="button" id="tab-signup" class="active" onclick="showTab('signup')">Sign up as a brand</button>
+        <button type="button" id="tab-login" onclick="showTab('login')">Manage my brand</button>
+        <button type="button" id="tab-copy" onclick="showTab('copy')">I'm a customer</button>
+      </div>
     </div>
     <div id="status"></div>
 
     <!-- ===== SIGN UP ===== -->
-    <form id="signup-form" onsubmit="return signupBrand(event)">
-      <label for="b-handle">Brand handle (@name)</label>
-      <input type="text" id="b-handle" placeholder="e.g. coffee_roasters" autocomplete="off">
-      <div class="hint-small">2–30 characters: lowercase letters, numbers, underscores. One account per brand — handles are unique.</div>
+    <section id="signup-form" class="card">
+      <form onsubmit="return signupBrand(event)">
+        <label for="b-handle" style="margin-top:0">Brand handle (@name)</label>
+        <input type="text" id="b-handle" placeholder="e.g. coffee_roasters" autocomplete="off">
+        <div class="hint">2–30 characters: lowercase letters, numbers, underscores. One account per brand — handles are unique.</div>
 
-      <label for="b-name">Business name</label>
-      <input type="text" id="b-name" placeholder="e.g. Coffee Roasters Co.">
+        <label for="b-name">Business name</label>
+        <input type="text" id="b-name" placeholder="e.g. Coffee Roasters Co.">
 
-      <label for="b-category">Category <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
-      <input type="text" id="b-category" placeholder="e.g. Food & Drink">
+        <label for="b-category">Category <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+        <input type="text" id="b-category" placeholder="e.g. Food &amp; Drink">
 
-      <label for="b-bio">Bio <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
-      <textarea id="b-bio" placeholder="Tell customers what your brand is about…"></textarea>
+        <label for="b-bio">Bio <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+        <textarea id="b-bio" placeholder="Tell customers what your brand is about…"></textarea>
 
-      <label for="b-style">Default code style</label>
-      <select id="b-style">
-        {% for key, meta in styles.items() %}
-          <option value="{{ key }}">{{ meta[0] }}</option>
-        {% endfor %}
-      </select>
+        <label for="b-style">Default code style</label>
+        <select id="b-style">
+          {% for key, meta in styles.items() %}
+            <option value="{{ key }}">{{ meta[0] }}</option>
+          {% endfor %}
+        </select>
 
-      <button class="primary" type="submit">Create brand account</button>
-      <div class="hint-small">Your brand <b>passcode</b> will be shown <b>once</b>. It is required to create product codes and to change anything on the account — save it somewhere safe.</div>
-    </form>
+        <button class="btn" type="submit" style="width:100%">Create brand account</button>
+        <div class="hint">Your brand <b>passcode</b> will be shown <b>once</b>. It is required to generate product codes and to change anything on the account — save it somewhere safe.</div>
+      </form>
+    </section>
 
-    <!-- ===== MANAGE (login + new product) ===== -->
-    <div id="login-form" style="display:none">
+    <!-- ===== MANAGE ===== -->
+    <section id="login-form" class="card hidden">
       <form onsubmit="return loginBrand(event)">
-        <label for="l-handle">Your brand handle</label>
+        <label for="l-handle" style="margin-top:0">Your brand handle</label>
         <input type="text" id="l-handle" placeholder="your_brand">
         <label for="l-passcode">Brand passcode</label>
         <input type="password" id="l-passcode" autocomplete="off" placeholder="your 10-character brand passcode">
-        <button class="primary" type="submit">Log in / verify</button>
+        <button class="btn" type="submit" style="width:100%">Log in / verify</button>
       </form>
 
-      <div id="manage-area" style="display:none">
-        <hr style="margin:20px 0;border:none;border-top:1.5px solid #e3e7f2">
-        <h3 style="margin:0 0 4px" id="manage-title">New product code</h3>
-        <div class="hint-small">You are managing <b id="manage-handle"></b>. Product-code changes need the <b>product's own</b> passcode; profile changes need the <b>brand's</b> passcode.</div>
+      <div id="manage-area" class="hidden">
+        <hr style="border:none;border-top:1px solid var(--border);margin:18px 0">
+        <h3 style="margin:0 0 4px">Generate a product code</h3>
+        <div class="hint">You are managing <b id="manage-handle"></b>. Only you (with your brand passcode) can create these codes.</div>
 
         <form onsubmit="return createProduct(event)">
           <label for="p-title">Product name</label>
           <input type="text" id="p-title" placeholder="e.g. Signature Blend 250g">
           <label for="p-message">Product link or message</label>
           <textarea id="p-message" placeholder="https://yourshop.com/products/signature-blend"></textarea>
-          <div class="hint-small">Max {{ max_bytes }} bytes. The printed code encodes its unique ID; scanning reveals this product page/ID.</div>
+          <div class="hint">Max {{ max_bytes }} bytes. The printed code encodes its unique ID; scanning reveals this product page/ID.</div>
           <label for="p-style">Style <span style="font-weight:400;color:var(--muted)">(blank = brand default)</span></label>
           <select id="p-style">
             <option value="">— brand default —</option>
@@ -196,45 +118,53 @@
               <option value="{{ key }}">{{ meta[0] }}</option>
             {% endfor %}
           </select>
-          <button class="primary" type="submit">Create product code</button>
+          <button class="btn" type="submit" style="width:100%">Create product code</button>
         </form>
 
-        <details style="margin-top:16px">
-          <summary style="font-weight:600;cursor:pointer">Change brand profile / passcode</summary>
+        <details>
+          <summary>Change brand profile / passcode</summary>
           <label for="bp-name">Business name</label>
           <input type="text" id="bp-name" placeholder="leave empty to keep">
           <label for="bp-bio">Bio</label>
           <textarea id="bp-bio" placeholder="leave empty to keep"></textarea>
           <label for="bp-newpass">New brand passcode <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
           <input type="text" id="bp-newpass" placeholder="leave empty to keep current">
-          <button class="small" style="margin-top:12px;width:100%" onclick="updateProfile()">Save profile changes</button>
+          <button class="btn secondary" style="margin-top:12px;width:100%" onclick="updateProfile()">Save profile changes</button>
         </details>
 
-        <hr style="margin:20px 0;border:none;border-top:1.5px solid #e3e7f2">
+        <hr style="border:none;border-top:1px solid var(--border);margin:18px 0">
         <h3 style="margin:0 0 4px">🛡️ Anti-counterfeit product units</h3>
-        <div class="hint-small">Register genuine product units: every unit gets a unique scannable code image (serial encoded inside) plus a secret <b>passcode to print on the packaging</b>. Customers scan the code and enter the passcode to verify authenticity at <b>/verify</b>.</div>
+        <div class="hint">Register genuine product units: every unit gets a unique scannable code image plus a secret <b>passcode to print on the packaging</b>. Customers scan the code on the homepage and enter that passcode — their proof of purchase is saved in your record book below.</div>
         <form onsubmit="return registerUnits(event)">
           <label for="u-title">Product name</label>
           <input type="text" id="u-title" placeholder="e.g. Signature Blend 250g">
           <label for="u-qty">Quantity of units (batch size)</label>
           <input type="text" id="u-qty" value="5" inputmode="numeric">
-          <button class="primary" type="submit">Generate authentic codes + passcodes</button>
+          <button class="btn" type="submit" style="width:100%">Generate authentic codes + passcodes</button>
         </form>
-        <div id="units-area" style="display:none">
-          <div id="units-summary" class="codebox" style="margin-top:12px"></div>
+        <div id="units-area" class="hidden">
+          <div id="units-summary" class="okbox"></div>
           <div id="units-list"></div>
         </div>
+
+        <hr style="border:none;border-top:1px solid var(--border);margin:18px 0">
+        <h3 style="margin:0 0 4px">📒 Purchase records (scan ledger)</h3>
+        <div class="hint">Every time a customer scans one of your codes and submits proof, it lands here — full history, private to your brand.</div>
+        <button class="btn secondary" onclick="loadLedger()">Load my records</button>
+        <a class="btn secondary" id="csv-link" href="#" style="text-decoration:none">⬇ CSV export</a>
+        <div id="ledger-stats" class="stats hidden"></div>
+        <div id="ledger-body"></div>
       </div>
-    </div>
+    </section>
 
     <!-- ===== CUSTOMER ===== -->
-    <div id="copy-form" style="display:none">
-      <p class="hint-small" style="margin-top:0">Bought a product from a brand? Scan its code (or ask for the product ID), then make <b>your own copy</b> of that product code below. You'll get a personal unique ID + passcode — only you can change your copy afterwards.</p>
-      <label for="c-pid">Product code ID (from the scanned brand code)</label>
+    <section id="copy-form" class="card hidden">
+      <p class="hint" style="margin-top:0">Bought a product from a brand? Scan its code (or ask for the product ID), then make <b>your own copy</b> of that product code below. You'll get a personal unique ID + passcode — only you can change your copy afterwards.</p>
+      <label for="c-pid" style="margin-top:0">Product code ID (from the scanned brand code)</label>
       <input type="text" id="c-pid" placeholder="paste the product ID here">
-      <button class="small" style="margin-top:10px;width:100%" onclick="lookupProduct()">Look up product</button>
+      <button class="btn secondary" style="margin-top:10px;width:100%" onclick="lookupProduct()">Look up product</button>
       <div id="copy-product-info"></div>
-      <div id="copy-actions" style="display:none">
+      <div id="copy-actions" class="hidden">
         <label for="c-customer">Your name <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
         <input type="text" id="c-customer" placeholder="e.g. bob">
         <label for="c-style">Pick a style for YOUR copy</label>
@@ -244,34 +174,40 @@
             <option value="{{ key }}">{{ meta[0] }}</option>
           {% endfor %}
         </select>
-        <button class="primary" type="button" onclick="claimCopy()">Make my own copy of this product code</button>
+        <button class="btn" type="button" onclick="claimCopy()" style="width:100%">Make my own copy of this product code</button>
       </div>
 
-      <hr style="margin:20px 0;border:none;border-top:1.5px solid #e3e7f2">
+      <hr style="border:none;border-top:1px solid var(--border);margin:18px 0">
       <h3 style="margin:0 0 6px">Already have a personal copy?</h3>
       <label for="mc-id">My personal copy ID</label>
       <input type="text" id="mc-id" placeholder="paste your copy's ID">
-      <button class="small" style="margin-top:10px;width:100%" onclick="lookupCopy()">Look up my copy</button>
+      <button class="btn secondary" style="margin-top:10px;width:100%" onclick="lookupCopy()">Look up my copy</button>
       <div id="mycopy-details"></div>
-      <div id="mycopy-fields" style="display:none">
+      <div id="mycopy-fields" class="hidden">
         <label for="mc-passcode">Your copy's passcode <span style="font-weight:400;color:var(--muted)">(required)</span></label>
         <input type="password" id="mc-passcode" autocomplete="off">
         <label for="mc-message">New message</label>
         <textarea id="mc-message" placeholder="leave empty to keep"></textarea>
-        <button class="primary" type="button" onclick="changeCopy()">Change my copy</button>
+        <button class="btn" type="button" onclick="changeCopy()" style="width:100%">Change my copy</button>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- ==================== RIGHT: the feed ==================== -->
-  <section>
-    <div class="card" style="margin-bottom:0;padding-bottom:8px">
-      <h2 style="margin:0 0 4px">Brand feed</h2>
-      <p class="hint-small" style="margin:0">Every business brand account on the platform and their published product codes. Click a code to enlarge it.</p>
+    <div class="section-title">Brand feed</div>
+    <div id="feed"><div class="empty">Loading brands…</div></div>
+  </main>
+
+  <aside class="side">
+    <div class="card" style="margin:0 0 12px;">
+      <b>Rules of the platform</b>
+      <ol class="hint" style="padding-left:18px; margin:8px 0 0;">
+        <li>Only verified business brand accounts can generate product codes.</li>
+        <li>A code can only be generated by the brand that owns it — never by customers.</li>
+        <li>Customers scan the code on the <a href="/">homepage</a> to prove they bought the product.</li>
+        <li>All records are saved permanently in the brand's ledger.</li>
+      </ol>
     </div>
-    <div id="feed" style="margin-top:16px"><div class="card empty">Loading brands…</div></div>
-  </section>
-</main>
+  </aside>
+</div>
 
 <!-- result modal (passcodes shown once) -->
 <div class="modal-bg" id="modal-bg" onclick="if(event.target===this) closeModal()">
@@ -281,7 +217,7 @@
   </div>
 </div>
 
-<footer>Built with Flask · zxing-cpp · Pillow — codes are Data&nbsp;Matrix symbols, not QR codes</footer>
+<footer>Proven · built with Flask · zxing-cpp · Pillow — codes are Data&nbsp;Matrix symbols, not QR codes</footer>
 
 <script>
 const STYLES = {{ styles | tojson }};
@@ -291,13 +227,17 @@ let lookedProduct = null;      // currently looked-up product record
 let lookedCopy = null;
 
 const statusEl = () => document.getElementById('status');
-function setStatus(cls, msg) { const s = statusEl(); s.className = cls; s.innerHTML = msg; }
+function setStatus(cls, msg) {
+  const s = statusEl();
+  s.innerHTML = msg ? '<div class="' + (cls === 'ok' ? 'okbox' : cls === 'err' ? 'errorbox' : 'hint') +
+                      '" style="margin:12px 14px;">' + msg + '</div>' : '';
+}
 function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 function showTab(which) {
   for (const t of ['signup','login','copy']) {
-    document.getElementById(t + '-form').style.display = t === which ? '' : 'none';
+    document.getElementById(t + '-form').classList.toggle('hidden', t !== which);
     document.getElementById('tab-' + t).className = t === which ? 'active' : '';
   }
   setStatus('', '');
@@ -425,10 +365,41 @@ async function loginBrand(ev) {
   return false;
 }
 function enterManageMode(brand) {
-  document.getElementById('manage-area').style.display = '';
+  document.getElementById('manage-area').classList.remove('hidden');
   document.getElementById('manage-handle').textContent = '@' + brand.handle;
   document.getElementById('bp-name').placeholder = brand.name;
   document.getElementById('bp-bio').placeholder = brand.bio || '';
+  const csv = document.getElementById('csv-link');
+  if (csv) csv.href = '/api/brands/' + encodeURIComponent(brand.handle) + '/scans.csv';
+  loadLedger();
+}
+async function loadLedger() {
+  if (!sessionBrand) return;
+  const statsBox = document.getElementById('ledger-stats');
+  const body = document.getElementById('ledger-body');
+  try {
+    const data = await api('/api/brands/' + encodeURIComponent(sessionBrand) + '/scans', 'POST',
+                           {passcode: sessionBrandPass});
+    statsBox.classList.remove('hidden');
+    statsBox.innerHTML =
+      '<div class="stat"><b>' + data.stats.total_scans + '</b><span>total scans</span></div>' +
+      '<div class="stat"><b style="color:var(--green)">' + data.stats.proofs_ok + '</b><span>proofs accepted</span></div>' +
+      '<div class="stat"><b style="color:var(--amber)">' + data.stats.suspect_resale + '</b><span>re-scans ⚠️</span></div>' +
+      '<div class="stat"><b style="color:var(--red)">' + data.stats.fakes + '</b><span>fake / unknown</span></div>';
+    const rows = data.scans || [];
+    if (!rows.length) { body.innerHTML = '<div class="hint" style="margin-top:10px">No customer scans recorded yet.</div>'; return; }
+    let html = '<table class="ledger"><tr><th>When</th><th>Serial</th><th>Customer</th><th>Result</th><th>IP · device</th></tr>';
+    for (const r of rows.slice(0, 100)) {
+      const chip = r.result === 'AUTHENTIC' ? 'green' : r.result === 'ALREADY_USED' ? 'amber' : 'red';
+      html += '<tr><td>' + new Date(r.at * 1000).toLocaleString() + '</td>'
+        + '<td class="mono">' + escapeHtml(r.serial) + '</td>'
+        + '<td>' + escapeHtml(r.customer || '—') + '</td>'
+        + '<td><span class="chip ' + chip + '">' + escapeHtml(r.result) + '</span></td>'
+        + '<td class="mono">' + escapeHtml(r.ip || '') + ' · ' + escapeHtml((r.device || '').slice(0, 40)) + '</td></tr>';
+    }
+    html += '</table>';
+    body.innerHTML = html;
+  } catch (e) { /* ledger not available */ }
 }
 async function createProduct(ev) {
   ev.preventDefault();
@@ -487,7 +458,7 @@ async function updateProfile() {
 async function lookupProduct() {
   const pid = document.getElementById('c-pid').value.trim();
   const info = document.getElementById('copy-product-info');
-  document.getElementById('copy-actions').style.display = 'none';
+  document.getElementById('copy-actions').classList.add('hidden');
   if (!pid) { setStatus('err', '✖ Enter a product code ID.'); return; }
   setStatus('', 'Looking up product code…');
   try {
@@ -499,7 +470,7 @@ async function lookupProduct() {
       + '<div><h3>' + escapeHtml(data.title) + '</h3><span class="handle">@' + escapeHtml(data.brand) + '</span></div></div>'
       + '<div class="codebox" style="margin-top:10px"><b>Message:</b> ' + escapeHtml(data.message)
       + '<br><b>Customer copies so far:</b> ' + (data.copies ? data.copies.length : 0) + '</div></div>';
-    document.getElementById('copy-actions').style.display = '';
+    document.getElementById('copy-actions').classList.remove('hidden');
     setStatus('ok', '✔ Found the brand product. Make your own copy below.');
   } catch (e) { info.innerHTML = ''; setStatus('err', '✖ ' + escapeHtml(e.message)); }
 }
@@ -527,7 +498,7 @@ async function claimCopy() {
 async function lookupCopy() {
   const id = document.getElementById('mc-id').value.trim();
   const det = document.getElementById('mycopy-details');
-  document.getElementById('mycopy-fields').style.display = 'none';
+  document.getElementById('mycopy-fields').classList.add('hidden');
   if (!id) { setStatus('err', '✖ Enter your copy ID.'); return; }
   setStatus('', 'Looking up your copy…');
   try {
@@ -538,7 +509,7 @@ async function lookupCopy() {
       + '<br><b>Product:</b> ' + escapeHtml(data.product_title || data.product || '')
       + '<br><b>Message:</b> ' + escapeHtml(data.message)
       + (data.customer ? '<br><b>Owner:</b> ' + escapeHtml(data.customer) : '') + '</div>';
-    document.getElementById('mycopy-fields').style.display = '';
+    document.getElementById('mycopy-fields').classList.remove('hidden');
     setStatus('ok', '✔ Found your copy. Enter its passcode to make changes.');
   } catch (e) { det.innerHTML = ''; setStatus('err', '✖ ' + escapeHtml(e.message)); }
 }
@@ -594,8 +565,8 @@ function unitCard(u) {
 function renderUnits(units) {
   const area = document.getElementById('units-area');
   const list = document.getElementById('units-list');
-  if (!units || !units.length) { area.style.display = 'none'; return; }
-  area.style.display = '';
+  if (!units || !units.length) { area.classList.add('hidden'); return; }
+  area.classList.remove('hidden');
   let html = '';
   for (const u of units) html += unitCard(u);
   list.innerHTML = html;
@@ -611,12 +582,12 @@ async function refreshBrandUnits() {
   if (!sessionBrand) return;
   try {
     const data = await api('/api/brands/' + encodeURIComponent(sessionBrand) + '/units');
-    document.getElementById('units-summary').style.display = '';
+    document.getElementById('units-summary').classList.remove('hidden');
     document.getElementById('units-summary').innerHTML =
       '<b>Registered units:</b> ' + data.summary.total_units +
       ' \u00b7 <b>verified by customers:</b> ' + data.summary.verified_units +
       ' \u00b7 <b>suspect (re-verified):</b> ' + data.summary.suspect_units;
-    document.getElementById('units-area').style.display = data.units.length ? '' : 'none';
+    document.getElementById('units-area').classList.toggle('hidden', !data.units.length);
     let html = '';
     for (const u of data.units.slice(0, 30)) html += unitCard(u);
     document.getElementById('units-list').innerHTML = html;
