@@ -219,6 +219,22 @@ class BrandStore(_JsonCollection):
             self._verify(record, passcode, ip, "brand account")
         return self._public_brand(record)
 
+    def authenticate_brand(self, handle: str, passcode: str, ip: str = "?") -> dict:
+        """Verify a brand passcode and return its *internal* record.
+
+        Unlike :meth:`verify_brand` this keeps the salted passcode hash so
+        other modules (e.g. authenticity.py) can re-check it without ever
+        seeing — or storing — the plaintext passcode.
+        """
+        with self._lock:
+            self._check_throttle(ip)
+            data = self._load()
+            record = data.get((handle or "").strip().lower().lstrip("@"))
+            if record is None:
+                raise BrandError(f"No brand account named “{(handle or '').strip()}”.")
+            self._verify(record, passcode, ip, "brand account")
+        return record
+
     def list_brands(self) -> list[dict]:
         data = self._load()
         brands = [self._public_brand(r) for r in data.values()]

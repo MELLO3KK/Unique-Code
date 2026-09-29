@@ -128,6 +128,7 @@
   <nav>
     <a href="/">⚡ Solo DM Codes</a>
     <a href="/brands" class="active">🏷️ Brand Network</a>
+    <a href="/verify">🔍 Verify a product</a>
   </nav>
 </header>
 
@@ -208,6 +209,21 @@
           <input type="text" id="bp-newpass" placeholder="leave empty to keep current">
           <button class="small" style="margin-top:12px;width:100%" onclick="updateProfile()">Save profile changes</button>
         </details>
+
+        <hr style="margin:20px 0;border:none;border-top:1.5px solid #e3e7f2">
+        <h3 style="margin:0 0 4px">🛡️ Anti-counterfeit product units</h3>
+        <div class="hint-small">Register genuine product units: every unit gets a unique scannable code image (serial encoded inside) plus a secret <b>passcode to print on the packaging</b>. Customers scan the code and enter the passcode to verify authenticity at <b>/verify</b>.</div>
+        <form onsubmit="return registerUnits(event)">
+          <label for="u-title">Product name</label>
+          <input type="text" id="u-title" placeholder="e.g. Signature Blend 250g">
+          <label for="u-qty">Quantity of units (batch size)</label>
+          <input type="text" id="u-qty" value="5" inputmode="numeric">
+          <button class="primary" type="submit">Generate authentic codes + passcodes</button>
+        </form>
+        <div id="units-area" style="display:none">
+          <div id="units-summary" class="codebox" style="margin-top:12px"></div>
+          <div id="units-list"></div>
+        </div>
       </div>
     </div>
 
@@ -543,7 +559,72 @@ async function changeCopy() {
   } catch (e) { setStatus('err', '✖ ' + escapeHtml(e.message)); }
 }
 
+// ------------------------------------------------------------------ authenticity units (brand side)
+async function registerUnits(ev) {
+  ev.preventDefault();
+  if (!sessionBrand) { setStatus('err', '\u2716 Log in as your brand first.'); return false; }
+  const title = document.getElementById('u-title').value.trim();
+  const quantity = parseInt(document.getElementById('u-qty').value, 10) || 1;
+  if (!title) { setStatus('err', '\u2716 Give the product a name for the label.'); return false; }
+  setStatus('', 'Generating authentic product codes\u2026');
+  try {
+    const data = await api('/api/brands/' + encodeURIComponent(sessionBrand) + '/units', 'POST',
+      {passcode: sessionBrandPass, title, quantity});
+    setStatus('ok', '\u2714 ' + data.count + ' unit(s) registered. Print each code image on the product and its passcode inside the packaging.');
+    renderUnits(data.units);
+    openModal('<h3>\U0001F6E1️ ' + data.count + ' authentic unit(s) created</h3>'
+      + '<div class="codebox warn"><b>These passcodes are shown ONCE.</b> Put each passcode with its matching product (tamper sticker / card in the box). The code image alone is NOT enough to pass verification \u2014 counterfeiters can copy images, but they cannot know the passcodes.</div>');
+    refreshBrandUnits();
+  } catch (e) { setStatus('err', '\u2716 ' + escapeHtml(e.message)); }
+  return false;
+}
+function unitCard(u) {
+  return '<div class="product" style="margin-top:10px">'
+    + '<img src="/a/' + u.serial + '.png" alt="code ' + u.serial + '" onclick="openUnit(\'' + u.serial + '\')" title="click to enlarge">'
+    + '<div class="ptitle">' + escapeHtml(u.title || '') + '</div>'
+    + '<div class="pmeta">Serial: ' + escapeHtml(u.serial)
+    + (u.passcode ? '<br>PASSCODE (print this): <b style="color:#c62828">' + escapeHtml(u.passcode) + '</b>' : '')
+    + (u.verified_count ? '<br>Verified ' + u.verified_count + '\u00d7' + (u.suspect ? ' \u26a0\ufe0f' : '') : '<br><i>not yet verified</i>') + '</div>'
+    + '<div class="actions">'
+    + '<button class="small" onclick="openUnit(\'' + u.serial + '\')">Enlarge</button>'
+    + '<a class="small" style="text-decoration:none" href="/a/' + u.serial + '.png" download="auth-' + u.serial + '.png">\u2b07 PNG</a>'
+    + '<a class="small" style="text-decoration:none" href="/verify/' + u.serial + '">Verify page</a>'
+    + '</div></div>';
+}
+function renderUnits(units) {
+  const area = document.getElementById('units-area');
+  const list = document.getElementById('units-list');
+  if (!units || !units.length) { area.style.display = 'none'; return; }
+  area.style.display = '';
+  let html = '';
+  for (const u of units) html += unitCard(u);
+  list.innerHTML = html;
+}
+function openUnit(serial) {
+  openModal('<h3>Authenticity code <span style="font-family:monospace;font-size:.85rem">' + escapeHtml(serial) + '</span></h3>'
+    + '<img src="/a/' + serial + '.png" alt="code">'
+    + '<div class="codebox"><b>Scanning this image opens:</b><br>' + location.origin + '/v/' + escapeHtml(serial)
+    + '<br><br>The customer then enters the passcode shipped with the product to verify it is genuine.</div>'
+    + '<a href="/a/' + serial + '.png" download="auth-' + serial + '.png" style="display:block;margin-top:10px;color:var(--accent);font-weight:600">\u2b07 Download PNG for printing</a>');
+}
+async function refreshBrandUnits() {
+  if (!sessionBrand) return;
+  try {
+    const data = await api('/api/brands/' + encodeURIComponent(sessionBrand) + '/units');
+    document.getElementById('units-summary').style.display = '';
+    document.getElementById('units-summary').innerHTML =
+      '<b>Registered units:</b> ' + data.summary.total_units +
+      ' \u00b7 <b>verified by customers:</b> ' + data.summary.verified_units +
+      ' \u00b7 <b>suspect (re-verified):</b> ' + data.summary.suspect_units;
+    document.getElementById('units-area').style.display = data.units.length ? '' : 'none';
+    let html = '';
+    for (const u of data.units.slice(0, 30)) html += unitCard(u);
+    document.getElementById('units-list').innerHTML = html;
+  } catch (e) {}
+}
+
 loadFeed();
+refreshBrandUnits();
 </script>
 </body>
 </html>
