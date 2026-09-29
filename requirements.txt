@@ -1,0 +1,8 @@
+Flask>=3.0
+Pillow>=10.0
+numpy>=1.26
+zxing-cpp>=2.2
+
+# Optional system library: only needed if you also want to use pylibdmtx/libdmtx.
+# zxing-cpp (used here) ships its decoder inside the wheel and needs nothing extra.
+# Debian/Ubuntu: apt-get install -y libdmtx0b   pip install pylibdmtx==0.1.9
