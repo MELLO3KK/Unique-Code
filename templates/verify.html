@@ -1,124 +1,98 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Verify Product Authenticity</title>
+{% extends "base.html" %}
+{% set active = 'verify' %}
+{% set cta_label = 'Scan a product code' %}
+{% block cta_action %}window.location='/{% if prefill %}?serial={{ prefill }}{% endif %}'{% endblock %}
+
+{% block title %}Verify Product — Proven{% endblock %}
+
+{% block head %}
 <style>
-  :root { --ink:#1a237e; --bg:#f4f6fb; --accent:#4353ff; --muted:#6b7280;
-          --ok:#0a7d33; --bad:#c62828; --warn:#b45309; }
-  * { box-sizing: border-box; }
-  body { margin:0; font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-         background:var(--bg); color:#111827; }
-  header { background:linear-gradient(135deg,#0f3d2e,#1b9a6e); color:#fff;
-           padding:30px 20px 26px; text-align:center; }
-  header h1 { margin:0 0 8px; font-size:1.7rem; }
-  header p { margin:0 auto; max-width:640px; opacity:.92; font-size:.95rem; }
-  header nav { margin-top:14px; display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
-  header nav a { color:#fff; text-decoration:none; font-weight:600; font-size:.88rem;
-                 padding:7px 16px; border-radius:999px; background:rgba(255,255,255,.16); }
-  header nav a:hover { background:rgba(255,255,255,.32); }
-  main { max-width:560px; margin:-18px auto 40px; padding:0 16px; }
-  .card { background:#fff; border-radius:14px; padding:22px;
-          box-shadow:0 8px 24px rgba(20,30,90,.08); margin-bottom:16px; }
-  label { display:block; font-weight:600; margin:14px 0 6px; }
-  input[type=text] { width:100%; padding:12px; border:1.5px solid #d6dae6; border-radius:10px;
-                     font-size:1.05rem; font-family:ui-monospace,Menlo,Consolas,monospace;
-                     letter-spacing:2px; text-transform:uppercase; }
-  input:focus { outline:none; border-color:var(--accent); }
-  button.primary { margin-top:18px; width:100%; padding:14px; font-size:1.08rem; font-weight:700;
-                   color:#fff; background:var(--accent); border:none; border-radius:10px; cursor:pointer; }
-  button.primary:hover { filter:brightness(1.08); }
-  button.small { padding:8px 14px; font-size:.88rem; font-weight:700; color:var(--accent);
-                 background:#fff; border:2px solid var(--accent); border-radius:9px; cursor:pointer; }
-  .hint { font-size:.85rem; color:var(--muted); margin-top:10px; line-height:1.5; }
-  .codebox { margin-top:12px; padding:12px 14px; border-radius:10px; background:#eef1ff;
-             font-family:ui-monospace,Menlo,Consolas,monospace; word-break:break-all;
-             font-size:.92rem; line-height:1.6; }
-  /* result banner */
-  #result { display:none; border-radius:14px; padding:22px; text-align:center; margin-bottom:16px; }
-  #result.show { display:block; }
-  #result.ok   { background:#e7f8ee; border:2px solid var(--ok); }
-  #result.bad  { background:#fdecec; border:2px solid var(--bad); }
-  #result.warn { background:#fff7e0; border:2px solid var(--warn); }
-  #result .icon { font-size:3rem; line-height:1; }
-  #result h2 { margin:10px 0 6px; font-size:1.35rem; }
-  #result.ok h2 { color:var(--ok); } #result.bad h2 { color:var(--bad); } #result.warn h2 { color:var(--warn); }
-  #result p { margin:0; color:#374151; font-size:.95rem; line-height:1.55; }
-  #result .meta { margin-top:14px; font-size:.82rem; color:var(--muted);
-                  font-family:ui-monospace,Menlo,monospace; }
-  .brandline { display:flex; align-items:center; gap:10px; justify-content:center; margin-top:10px; }
-  .avatar { width:34px; height:34px; border-radius:50%; background:linear-gradient(135deg,#1a237e,#4353ff);
-            color:#fff; display:flex; align-items:center; justify-content:center; font-weight:800; }
-  .spin { display:inline-block; width:1em; height:1em; border:2px solid var(--accent);
-          border-top-color:transparent; border-radius:50%; animation:r 0.8s linear infinite; vertical-align:-2px; }
-  @keyframes r { to { transform:rotate(360deg); } }
-  footer { text-align:center; color:var(--muted); font-size:.85rem; margin-bottom:30px; }
+  /* page-specific: verdict banner + stepper */
+  .steps { display:flex; gap:0; margin: 4px 16px 14px; }
+  .step { flex:1; text-align:center; font-size:.78rem; font-weight:700; color:var(--muted); position:relative; padding-top:26px; }
+  .step::before { content:""; position:absolute; top:6px; left:50%; transform:translateX(-50%);
+    width:16px; height:16px; border-radius:50%; background:var(--bg-elev); border:2px solid var(--border-strong); }
+  .step::after  { content:""; position:absolute; top:13px; left:calc(50% + 12px); right:calc(-50% + 12px); height:2px; background:var(--border); }
+  .step:last-child::after { display:none; }
+  .step.done { color:var(--green); }
+  .step.done::before { background:var(--green); border-color:var(--green); box-shadow:0 0 10px rgba(34,201,138,.6); }
+  .step.now  { color:var(--accent); }
+  .step.now::before { background:var(--accent); border-color:var(--accent); box-shadow:0 0 10px rgba(79,140,255,.6); }
+
+  #result { display:none; margin:14px; border-radius:20px; padding:28px 22px; text-align:center;
+    border:1px solid var(--border); background:var(--panel); box-shadow:var(--shadow-md); }
+  #result.show { display:block; animation:pop .35s var(--ease); }
+  #result .halo { width:88px; height:88px; margin:0 auto 12px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:2.6rem;
+    background:var(--bg-elev); border:2px solid var(--border-strong); }
+  #result h2 { margin:6px 0 8px; font-size:1.5rem; letter-spacing:-.02em; }
+  #result p { margin:0 auto; max-width:440px; color:var(--muted); font-size:.95rem; line-height:1.6; }
+  #result .meta { margin-top:14px; font-size:.8rem; color:var(--muted); }
+  #result.ok   { border-color:var(--green); background:linear-gradient(180deg,#22c98a1f,var(--panel)); }
+  #result.ok .halo { border-color:var(--green); box-shadow:0 0 34px rgba(34,201,138,.45); }
+  #result.ok h2 { color:var(--green); }
+  #result.bad  { border-color:var(--red); background:linear-gradient(180deg,#ff5d7a1f,var(--panel)); }
+  #result.bad .halo { border-color:var(--red); box-shadow:0 0 34px rgba(255,93,122,.45); }
+  #result.bad h2 { color:var(--red); }
+  #result.warn { border-color:var(--amber); background:linear-gradient(180deg,#ffc83d1a,var(--panel)); }
+  #result.warn .halo { border-color:var(--amber); box-shadow:0 0 34px rgba(255,200,61,.4); }
+  #result.warn h2 { color:var(--amber); }
+  #result.pending .halo { border-color:var(--accent); box-shadow:0 0 34px rgba(79,140,255,.4); }
+  #result.pending h2 { color:var(--accent); }
+  .brandline { display:flex; align-items:center; gap:10px; justify-content:center; margin-top:12px; }
 </style>
-</head>
-<body>
-<header>
-  <h1>🔍 Product Authenticity Check</h1>
-  <p>You scanned a product code. Enter the <strong>passcode that came with the product</strong>
-     (printed on the sticker / card inside the box) to confirm this item is genuine and from the brand.</p>
-  <nav>
-    <a href="/">⚡ Solo DM Codes</a>
-    <a href="/brands">🏷️ Brand Network</a>
-    <a href="/verify">🔍 Verify a product</a>
-  </nav>
-</header>
+{% endblock %}
 
-<main>
-  <!-- verdict banner -->
-  <div id="result">
-    <div class="icon" id="r-icon"></div>
-    <h2 id="r-title"></h2>
-    <div class="brandline" id="r-brand"></div>
-    <p id="r-msg"></p>
-    <div class="meta" id="r-meta"></div>
-  </div>
+{% block page_title %}🔍 Product Authenticity Check{% endblock %}
+{% block page_sub %}You scanned a product code. Enter the <strong>passcode that came with the product</strong> (printed on the sticker / card inside the box) to confirm this item is genuine and from the brand.{% endblock %}
 
-  <section class="card" id="form-card">
-    <h2 style="margin:0 0 4px">Verify your product</h2>
-    <p class="hint" style="margin-top:0">The code image attached to your product already contains its unique serial — scanning it fills the first field automatically.</p>
+{% block feed %}
+    <div class="steps" aria-hidden="true">
+      <div class="step done">Code scanned</div>
+      <div class="step now" id="step-pass">Passcode entered</div>
+      <div class="step" id="step-verdict">Verdict</div>
+    </div>
 
-    <label for="serial">Product code (serial from the scanned image)</label>
-    <input type="text" id="serial" placeholder="e.g. AB3D4K7M9P2Q" autocomplete="off" spellcheck="false" value="{{ prefill }}">
-    <button class="small" style="margin-top:10px" onclick="lookup()">Check the code exists</button>
-    <div id="preinfo"></div>
+    <!-- verdict banner -->
+    <div id="result" role="alert">
+      <div class="halo" id="r-icon"></div>
+      <h2 id="r-title"></h2>
+      <div class="brandline" id="r-brand"></div>
+      <p id="r-msg"></p>
+      <div class="meta mono" id="r-meta"></div>
+    </div>
 
-    <label for="passcode">Passcode printed with the product</label>
-    <input type="text" id="passcode" placeholder="8-character passcode" autocomplete="off" spellcheck="false">
+    <section class="card" id="form-card">
+      <h3 style="margin:0 0 4px">Verify your product</h3>
+      <p class="hint" style="margin-top:0">The code image attached to your product already contains its unique serial — scanning it fills the first field automatically.</p>
 
-    <button class="primary" onclick="verify()">✔ Verify authenticity</button>
-    <div class="hint">A counterfeit can copy the printed image, but it cannot know the secret
-      passcode stored only on the brand's verification server. Wrong pairing → the product is fake.</div>
-  </section>
+      <label for="serial">Product code (serial from the scanned image)</label>
+      <input type="text" id="serial" placeholder="e.g. AB3D4K7M9P2Q" autocomplete="off" spellcheck="false" value="{{ prefill }}" style="text-transform:uppercase">
+      <button class="btn secondary small" style="margin-top:10px" onclick="lookup()">🔎 Check the code exists</button>
+      <div id="preinfo"></div>
 
-  <section class="card">
-    <h3 style="margin:0 0 6px">How this works</h3>
-    <ol class="hint" style="margin:0; padding-left:18px; line-height:1.8">
-      <li>The brand creates an account and registers each product unit — one unique serial + one secret passcode per item.</li>
-      <li>The serial is encoded in the scannable code image attached to the product; the passcode ships privately with it.</li>
-      <li>You scan the code, land here, and enter the passcode.</li>
-      <li><b>AUTHENTIC</b>: serial + passcode match. <b>FAKE</b>: they don't. Already verified elsewhere? You'll get a clone/resale warning.</li>
-    </ol>
-  </section>
-</main>
+      <label for="passcode">Passcode printed with the product</label>
+      <input type="text" id="passcode" placeholder="8-character passcode" autocomplete="off" spellcheck="false" maxlength="10" style="text-transform:uppercase">
 
-<footer>Built with Flask · zxing-cpp · Pillow — codes are Data&nbsp;Matrix symbols, not QR codes</footer>
+      <button class="btn" id="verify-btn" onclick="verify()" style="width:100%">✔ Verify authenticity</button>
+      <div class="hint">A counterfeit can copy the printed image, but it cannot know the secret
+        passcode stored only on the brand's verification server. Wrong pairing → the product is fake.</div>
+    </section>
 
+    <section class="card">
+      <h3 style="margin:0 0 6px">How this works</h3>
+      <ol class="hint" style="margin:0; padding-left:18px; line-height:1.9">
+        <li>The brand creates an account and registers each product unit — one unique serial + one secret passcode per item.</li>
+        <li>The serial is encoded in the scannable code image attached to the product; the passcode ships privately with it.</li>
+        <li>You scan the code, land here, and enter the passcode.</li>
+        <li><b style="color:var(--green)">AUTHENTIC</b>: serial + passcode match. <b style="color:var(--red)">FAKE</b>: they don't. Already verified elsewhere? You'll get a clone/resale warning.</li>
+      </ol>
+    </section>
+{% endblock %}
+
+{% block scripts %}
 <script>
 const prefill = {{ prefill | tojson }};
-const $ = id => document.getElementById(id);
-function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-async function api(url, method, body){
-  const resp = await fetch(url,{method:method||'GET',
-    headers:body?{'Content-Type':'application/json'}:{}, body:body?JSON.stringify(body):undefined});
-  const data = await resp.json().catch(()=>({}));
-  return {ok:resp.ok, status:resp.status, data};
-}
-function fmtTime(t){ return t ? new Date(t*1000).toLocaleString() : '—'; }
 
 async function lookup(){
   const serial = $('serial').value.trim().toUpperCase();
@@ -126,11 +100,12 @@ async function lookup(){
   if(!serial){ box.innerHTML='<div class="codebox">Enter the serial first (or scan the product code).</div>'; return; }
   box.innerHTML = '<div class="hint"><span class="spin"></span> Looking up…</div>';
   const r = await api('/api/auth/info/'+encodeURIComponent(serial));
-  if(!r.ok){ box.innerHTML='<div class="codebox" style="background:#fdecec">✖ '+esc(r.data.error||'Code not found.')+'</div>'; return; }
+  if(!r.ok){ box.innerHTML='<div class="errorbox">✖ '+esc(r.data.error||'Code not found.')+'</div>'; return; }
   const u = r.data;
   box.innerHTML = '<div class="codebox"><b>Brand:</b> @'+esc(u.brand)+(u.brand_name?' — '+esc(u.brand_name):'')+
     '<br><b>Product:</b> '+esc(u.title||'(no title)')+
     '<br><b>Status so far:</b> '+(u.verified_count? ('verified '+u.verified_count+' time(s) — first on '+esc(fmtTime(u.first_verified))) : 'never verified before')+'</div>';
+  $('passcode').focus();
 }
 
 function banner(cls, icon, title, msg, brand, meta){
@@ -141,6 +116,8 @@ function banner(cls, icon, title, msg, brand, meta){
   $('r-msg').textContent = msg;
   $('r-brand').innerHTML = brand || '';
   $('r-meta').innerHTML = meta || '';
+  document.querySelectorAll('.step').forEach((s,i)=>{ if(i===1) s.className='step '+(cls==='pending'?'now':'done');
+                                                     if(i===2) s.className='step '+(cls==='pending'?'':'done '+(cls==='ok'?'done':cls)); });
   window.scrollTo({top:0, behavior:'smooth'});
 }
 
@@ -148,27 +125,35 @@ async function verify(){
   const serial = $('serial').value.trim().toUpperCase();
   const passcode = $('passcode').value.trim().toUpperCase();
   if(!serial || !passcode){ banner('warn','⚠️','Missing details','Enter both the product code and the passcode printed with your product.'); return; }
-  banner('warn','⏳','Checking…','Contacting the verification server.');
+  const btn = $('verify-btn');
+  btn.disabled = true;
+  banner('pending','⏳','Checking…','Contacting the verification server.');
   const r = await api('/api/verify','POST',{serial, passcode});
+  btn.disabled = false;
   const d = r.data;
-  const brandHtml = d.unit ? ('<div class="avatar">'+esc(d.unit.brand[0])+'</div><b>@'+esc(d.unit.brand)+'</b> · '+esc(d.unit.title||'product')) : '';
+  const brandHtml = d.unit ? ('<div class="avatar sm">'+esc(d.unit.brand[0])+'</div><b>@'+esc(d.unit.brand)+'</b> · '+esc(d.unit.title||'product')) : '';
   const metaHtml = d.unit ? ('Serial '+esc(d.unit.serial)+' · registered '+esc(fmtTime(d.unit.created))+
                     '<br>Verifications of this exact code: '+d.unit.verified_count) : '';
   if(d.result==='AUTHENTIC'){
     banner('ok','✅','AUTHENTIC PRODUCT', d.message, brandHtml, metaHtml);
-  } else if(d.result==='AUTHENTIC_BUT_RESELLER'){
+    toast('This product is authentic 🎉','ok');
+  } else if(d.result==='ALREADY_USED' || d.result==='AUTHENTIC_BUT_RESELLER'){
     banner('warn','⚠️','CAUTION — ALREADY VERIFIED', d.message, brandHtml, metaHtml);
+    toast('Genuine code, but verified before','info');
   } else if(d.result==='FAKE'){
     banner('bad','❌','NOT AUTHENTIC — FAKE', d.message, brandHtml, '');
+    toast('This product could not be authenticated','err');
   } else if(d.result==='NOT_FOUND'){
     banner('bad','❌','CODE NOT RECOGNISED', d.message, '', '');
+    toast('Code not recognised','err');
   } else {
     banner('bad','❌','Verification failed', d.message||d.error||'Server error','', '');
+    toast('Verification failed','err');
   }
 }
 
 if(prefill){ $('serial').value = prefill; lookup(); }
 $('passcode').addEventListener('keydown', e => { if(e.key==='Enter') verify(); });
+$('serial').addEventListener('keydown', e => { if(e.key==='Enter') lookup(); });
 </script>
-</body>
-</html>
+{% endblock %}

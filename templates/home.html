@@ -1,113 +1,63 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Proven — scan it. Prove it.</title>
-<link rel="stylesheet" href="/style.css">
-</head>
-<body>
+{% extends "base.html" %}
+{% set active = 'scan' %}
+{% set cta_label = 'Scan a product code' %}
 
-<nav class="topbar">
-  <a class="logo" href="/">
-    <svg viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 15.5l-4-4 1.41-1.41L10 13.67l6.59-6.59L18 8.5l-8 8z"/></svg>
-    Proven
-  </a>
-  <div class="spacer"></div>
-  <input id="brand-search" class="searchbox" type="text" placeholder="Search brands…" autocomplete="off">
-</nav>
+{% block page_title %}Scan &amp; Verify{% endblock %}
+{% block page_sub %}Only registered business brands can create product codes. You scan the code on the product and submit it as proof that you bought a genuine item — every record is saved.{% endblock %}
 
-<div class="shell">
-  <!-- left nav -->
-  <aside class="nav">
-    <a href="/" class="active">
-      <svg viewBox="0 0 24 24"><path d="M12 3L2 12h3v8h6v-6h2v6h6v-8h3L12 3z"/></svg> Scan &amp; Verify
-    </a>
-    <a href="/brands">
-      <svg viewBox="0 0 24 24"><path d="M4 4h7v7H4V4zm9 0h7v7h-7V4zM4 13h7v7H4v-7zm9 0h7v7h-7v-7z"/></svg> Brands
-    </a>
-    <a href="/brands#signup">
-      <svg viewBox="0 0 24 24"><path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg> Create a brand account
-    </a>
-    <button class="post-btn" onclick="document.getElementById('scan-file').click()">Scan a product code</button>
-  </aside>
-
-  <!-- center feed -->
-  <main class="feed">
-    <div class="page-head">
-      <h1>Scan &amp; Verify</h1>
-      <p class="sub">Only registered business brands can create product codes. You scan the code on the product and submit it as proof that you bought a genuine item — every record is saved.</p>
-    </div>
-
+{% block feed %}
     <!-- composer: customer scans here -->
-    <div class="card">
+    <div class="card" id="scanner-card">
       <div style="display:flex; gap:12px;">
-        <div class="avatar green">✓</div>
+        <div class="avatar green" aria-hidden="true">✓</div>
         <div style="flex:1; min-width:0;">
           <label for="scan-file" style="margin-top:0">Step 1 — Scan the product code with your camera</label>
           <input id="scan-file" type="file" accept="image/*" capture="environment" class="hidden">
           <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:6px;">
             <button class="btn" onclick="document.getElementById('scan-file').click()">📷 Open camera / choose photo</button>
             <button class="btn secondary" onclick="pasteHint()">Or paste an image (Ctrl+V)</button>
+            <button class="btn secondary" id="manual-toggle" onclick="$('manual').classList.toggle('hidden'); $('serial').focus();">Type serial manually</button>
           </div>
           <div id="scan-preview"></div>
-          <div id="scan-status" class="hint"></div>
+          <div id="scan-status" class="hint" role="status" aria-live="polite"></div>
 
           <div id="manual" class="hidden">
             <label for="serial">…or type the product code (serial) printed under the code</label>
-            <input id="serial" type="text" placeholder="e.g. A1B2C3D4E5F6" maxlength="16">
+            <input id="serial" type="text" placeholder="e.g. A1B2C3D4E5F6" maxlength="16" autocomplete="off" spellcheck="false" style="text-transform:uppercase">
+            <button class="btn small" style="margin-top:10px" onclick="showProof($('serial').value.trim().toUpperCase())">Continue with typed serial</button>
           </div>
 
           <div id="proof" class="hidden">
             <label for="passcode">Step 2 — Enter the passcode printed inside the packaging</label>
-            <input id="passcode" type="text" placeholder="10-character passcode" maxlength="10" style="text-transform:uppercase">
-            <label for="customer">Your name or handle (optional — shown to the brand as proof of purchase)</label>
-            <input id="customer" type="text" placeholder="@you" maxlength="60">
+            <input id="passcode" type="text" placeholder="Passcode from the packaging" maxlength="10" style="text-transform:uppercase" autocomplete="off" spellcheck="false">
+            <label for="customer">Your name or handle <span style="font-weight:400;color:var(--muted)">(optional — shown to the brand as proof of purchase)</span></label>
+            <input id="customer" type="text" placeholder="@you" maxlength="60" autocomplete="nickname">
             <button class="btn" id="verify-btn" onclick="submitProof()">✅ Submit proof of purchase</button>
           </div>
-          <div id="scan-result"></div>
+          <div id="scan-result" aria-live="polite"></div>
         </div>
       </div>
     </div>
 
     <div class="section-title">Live purchase proofs</div>
-    <div id="ticker"></div>
-  </main>
+    <div id="ticker"><div class="skeleton" style="margin:12px 14px;"></div><div class="skeleton" style="margin:12px 14px;"></div></div>
+{% endblock %}
 
-  <!-- right rail -->
-  <aside class="side">
+{% block side %}
     <div class="card" style="margin:0 0 12px;">
-      <b>How Proven works</b>
-      <ol class="hint" style="padding-left:18px; margin:8px 0 0;">
-        <li>A business brand creates its account <a href="/brands">here</a> — only brands can generate product codes.</li>
-        <li>The brand prints the code + a secret passcode on the packaging.</li>
-        <li>You buy the product, scan the code above and enter the passcode.</li>
-        <li>Your proof of purchase is saved forever in the brand's record book.</li>
-      </ol>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <b>Brands on Proven</b>
+      </div>
+      <div id="brand-list" style="margin-top:10px;"><div class="skeleton"></div></div>
     </div>
-    <div class="section-title" style="padding:4px 0 8px;">Brands on Proven</div>
-    <div id="brand-list"></div>
-  </aside>
-</div>
+{% endblock %}
 
+{% block topbar_extra %}
+  <input id="brand-search" class="searchbox" type="text" placeholder="Search brands…" autocomplete="off" aria-label="Search brands">
+{% endblock %}
+
+{% block scripts %}
 <script>
-const $ = id => document.getElementById(id);
-function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-async function api(url, method, body){
-  const resp = await fetch(url,{method:method||'GET',
-    headers:body?{'Content-Type':'application/json'}:{}, body:body?JSON.stringify(body):undefined});
-  const data = await resp.json().catch(()=>({}));
-  return {ok:resp.ok, status:resp.status, data};
-}
-function fmtTime(t){ return t ? new Date(t*1000).toLocaleString() : '—'; }
-function timeAgo(t){
-  const s = Math.max(1,(Date.now()/1000 - t));
-  if(s<60) return Math.round(s)+'s ago';
-  if(s<3600) return Math.round(s/60)+'m ago';
-  if(s<86400) return Math.round(s/3600)+'h ago';
-  return Math.round(s/86400)+'d ago';
-}
-
 let scannedSerial = '';
 
 // ---------- scanning ----------
@@ -118,10 +68,13 @@ document.addEventListener('paste', e => {
   for(const it of (e.clipboardData||{items:[]}).items||[])
     if(it.type.startsWith('image/')){ handleImage(it.getAsFile()); break; }
 });
-function pasteHint(){ $('scan-status').textContent = 'Copy a screenshot/photo of the code, then press Ctrl+V here.'; }
+function pasteHint(){
+  $('scan-status').innerHTML = '<span class="hint">Copy a screenshot/photo of the code, then press Ctrl+V here.</span>';
+  toast('Copy an image of the code, then press <b>Ctrl+V</b>','info');
+}
 
 async function handleImage(file){
-  $('scan-status').innerHTML = '<span class="hint">Decoding…</span>';
+  $('scan-status').innerHTML = '<span class="hint"><span class="spin"></span> Decoding…</span>';
   $('scan-preview').innerHTML = '';
   const url = URL.createObjectURL(file);
   const img = new Image();
@@ -147,17 +100,23 @@ async function handleImage(file){
     const resp = await fetch('/scan',{method:'POST', body:fd});
     const data = await resp.json().catch(()=>({}));
     if(resp.ok && data.text) text = data.text;
-    else { $('scan-status').innerHTML = '<div class="errorbox">'+esc(data.error||'No code found in that image.')+' — you can still type the serial manually.</div>'; $('manual').classList.remove('hidden'); showProof($('serial').value.trim()); return; }
+    else {
+      $('scan-status').innerHTML = '<div class="errorbox">'+esc(data.error||'No code found in that image.')+' — you can still type the serial manually.</div>';
+      toast('No code found in that image','err');
+      $('manual').classList.remove('hidden'); $('serial').focus(); return;
+    }
   }
   // payload is either /v/<SERIAL> landing URL or a bare serial
   const m = String(text).match(/\/v\/([A-Z0-9]+)/i);
   scannedSerial = m ? m[1].toUpperCase() : String(text).trim().toUpperCase();
   $('manual').classList.add('hidden');
-  $('scan-status').innerHTML = '<div class="okbox">✔ Code detected — product <b class="mono">'+esc(scannedSerial)+'</b></div>';
+  $('scan-status').innerHTML = '<div class="okbox">✔ Code detected — product <b class="mono">'+esc(scannedSerial)+'</b> <button class="small" onclick="copyText(\''+esc(scannedSerial)+'\',\'Serial\')">⧉ copy</button></div>';
+  toast('Code detected: <b class="mono">'+esc(scannedSerial)+'</b>','ok');
   showProof(scannedSerial);
 }
 
 function showProof(serial){
+  if(serial) scannedSerial = serial.toUpperCase();
   $('proof').classList.remove('hidden');
   $('passcode').focus();
   // public pre-info about the unit
@@ -176,23 +135,30 @@ async function submitProof(){
   const passcode = $('passcode').value.trim().toUpperCase();
   const customer = $('customer').value.trim();
   if(!serial){ $('scan-result').innerHTML='<div class="errorbox">Scan the code first, or type its serial.</div>'; return; }
-  if(!passcode){ $('scan-result').innerHTML='<div class="errorbox">Enter the passcode printed with the product.</div>'; return; }
-  $('verify-btn').disabled = true;
+  if(!passcode){ $('scan-result').innerHTML='<div class="errorbox">Enter the passcode printed with the product.</div>'; $('passcode').focus(); return; }
+  const btn = $('verify-btn');
+  btn.disabled = true; btn.textContent = '⏳ Checking…';
   const r = await api('/api/verify','POST',{serial, passcode, customer});
-  $('verify-btn').disabled = false;
+  btn.disabled = false; btn.textContent = '✅ Submit proof of purchase';
   const d = r.data;
   let box;
-  if(d.result==='AUTHENTIC')
+  if(d.result==='AUTHENTIC'){
     box = '<div class="okbox"><b>✅ PROOF ACCEPTED — genuine product.</b><br>'+esc(d.message)+
           (d.unit?'<br>Saved to @'+esc(d.unit.brand)+"'s purchase records.":'')+'</div>';
-  else if(d.result==='ALREADY_USED')
-    box = '<div class="errorbox" style="border-color:#ffd40055;background:#ffd4001a;color:#ffe970"><b>⚠️ Genuine code, but already proven before.</b><br>'+esc(d.message)+'</div>';
-  else if(d.result==='FAKE')
+    toast('Proof accepted — genuine product 🎉','ok');
+  } else if(d.result==='ALREADY_USED'){
+    box = '<div class="errorbox" style="border-color:#ffc83d55;background:#ffc83d14;color:#ffe970"><b>⚠️ Genuine code, but already proven before.</b><br>'+esc(d.message)+'</div>';
+    toast('Genuine code, but re-scanned before','info');
+  } else if(d.result==='FAKE'){
     box = '<div class="errorbox"><b>❌ NOT AUTHENTIC.</b><br>'+esc(d.message)+'</div>';
-  else if(d.result==='NOT_FOUND')
+    toast('This product could not be authenticated','err');
+  } else if(d.result==='NOT_FOUND'){
     box = '<div class="errorbox"><b>❌ CODE NOT RECOGNISED.</b><br>'+esc(d.message)+'</div>';
-  else
+    toast('Code not recognised','err');
+  } else {
     box = '<div class="errorbox"><b>❌ Verification failed.</b><br>'+esc(d.message||d.error||'Server error')+'</div>';
+    toast('Verification failed','err');
+  }
   $('scan-result').innerHTML = box;
   loadTicker();
 }
@@ -215,12 +181,12 @@ async function loadTicker(){
   if(!posts.length){ list.innerHTML='<div class="empty">No purchase proofs yet. Scan a product code to make the first one.</div>'; return; }
   list.innerHTML = posts.map(({brand,scan})=>`
     <article class="post">
-      <div class="avatar">${esc((brand.name||brand.handle)[0].toUpperCase())}</div>
+      <div class="avatar" aria-hidden="true">${esc((brand.name||brand.handle)[0].toUpperCase())}</div>
       <div class="pbody">
         <div class="phead"><span class="pname">${esc(brand.name)}</span>
           <span class="phandle">@${esc(brand.handle)}</span>
-          <span class="verified">✔</span>
-          <span class="ptime">· ${timeAgo(scan.at)}</span></div>
+          <span class="verified" title="Verified brand">✔</span>
+          <span class="ptime" title="${esc(fmtTime(scan.at))}">· ${timeAgo(scan.at)}</span></div>
         <div class="ptext">${scan.customer?esc(scan.customer)+' proves they bought':esc('Someone proved they bought')}
           a genuine unit <span class="chip blue mono">${esc(scan.serial)}</span>
           ${scan.result==='ALREADY_USED'?'<span class="chip amber">re-scan ⚠️</span>':''}</div>
@@ -239,9 +205,9 @@ async function loadBrands(filter=''){
   box.innerHTML = arr.slice(0,8).map(b=>`
     <div class="card" style="margin:0 0 10px; padding:12px;">
       <div style="display:flex; gap:10px; align-items:center;">
-        <div class="avatar sm">${esc((b.name||b.handle)[0].toUpperCase())}</div>
+        <div class="avatar sm" aria-hidden="true">${esc((b.name||b.handle)[0].toUpperCase())}</div>
         <div style="min-width:0">
-          <b>${esc(b.name)}</b> <span class="verified">✔</span><br>
+          <b>${esc(b.name)}</b> <span class="verified" title="Verified brand">✔</span><br>
           <span class="phandle">@${esc(b.handle)}${b.category?' · '+esc(b.category):''}</span>
         </div>
       </div>
@@ -252,5 +218,4 @@ $('brand-search').addEventListener('input', e => loadBrands(e.target.value.trim(
 loadTicker(); loadBrands();
 setInterval(loadTicker, 15000);
 </script>
-</body>
-</html>
+{% endblock %}
