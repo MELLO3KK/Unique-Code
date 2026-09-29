@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Proven — scannable Data Matrix product codes that prove authenticity. Scan it. Prove it.">
+<meta name="theme-color" content="#0b0f19">
+<title>{% block title %}Proven — scan it. Prove it.{% endblock %}</title>
+<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="%231d9bf0" d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 15.5l-4-4 1.41-1.41L10 13.67l6.59-6.59L18 8.5l-8 8z"/></svg>'>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+{% block head %}{% endblock %}
+</head>
+<body>
+
+<a class="skip-link" href="#main-content">Skip to content</a>
+
+<nav class="topbar" aria-label="Main navigation">
+  <a class="logo" href="/" accesskey="h">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 15.5l-4-4 1.41-1.41L10 13.67l6.59-6.59L18 8.5l-8 8z"/></svg>
+    Proven
+  </a>
+  <div class="spacer"></div>
+  {% block topbar_extra %}{% endblock %}
+</nav>
+
+<div class="shell">
+  <!-- left nav -->
+  <aside class="nav" aria-label="Site sections">
+    <a href="/"{{ ' class="active"' if active == 'scan' else '' }} aria-label="Scan and verify a product code">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2v2H4v5H2V2h7zm13 0v7h-2V4h-5V2h7zM2 15h2v5h5v2H2v-7zm20 0h2v7h-7v-2h5v-5zM12 7a5 5 0 100 10 5 5 0 000-10zm0 2a3 3 0 110 6 3 3 0 010-6z"/></svg>
+      <span>Scan &amp; Verify</span>
+    </a>
+    <a href="/brands"{{ ' class="active"' if active == 'brands' else '' }} aria-label="Browse the brand network">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4V4zm9 0h7v7h-7V4zM4 13h7v7H4v-7zm9 0h7v7h-7v-7z"/></svg>
+      <span>Brands</span>
+    </a>
+    <a href="/verify"{{ ' class="active"' if active == 'verify' else '' }} aria-label="Verify a product by serial">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 10-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1114 9.5 4.5 4.5 0 019.5 14z"/></svg>
+      <span>Verify a product</span>
+    </a>
+    <a href="/brands#signup"{{ ' class="active"' if active == 'signup' else '' }}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+      <span>Create a brand account</span>
+    </a>
+    <button class="post-btn" onclick="{% block cta_action %}document.getElementById('scan-file').click(){% endblock %}">{{ cta_label }}</button>
+    <p class="nav-foot">Data&nbsp;Matrix · ISO/IEC&nbsp;16022<br>not a QR code</p>
+  </aside>
+
+  <!-- center feed -->
+  <main class="feed" id="main-content">
+    <div class="page-head">
+      <h1>{% block page_title %}{% endblock %}</h1>
+      <p class="sub">{% block page_sub %}{% endblock %}</p>
+      {% block tabs %}{% endblock %}
+    </div>
+    {% block feed %}{% endblock %}
+    <footer>Proven · built with Flask · zxing-cpp · Pillow — codes are Data&nbsp;Matrix symbols, not QR codes</footer>
+  </main>
+
+  <!-- right rail -->
+  <aside class="side" aria-label="Helpful information">
+    {% block side %}{% endblock %}
+    <div class="card" style="margin:12px 0 0;">
+      <b>How Proven works</b>
+      <ol class="hint" style="padding-left:18px; margin:8px 0 0;">
+        <li>A business brand <a href="/brands">creates its account</a> — only brands can generate product codes.</li>
+        <li>The brand prints the code + a secret passcode on the packaging.</li>
+        <li>Customers buy the product, scan the code and enter the passcode.</li>
+        <li>Every proof of purchase is saved forever in the brand's record book.</li>
+      </ol>
+    </div>
+  </aside>
+</div>
+
+<!-- result modal (passcodes shown once) -->
+<div class="modal-bg" id="modal-bg" onclick="if(event.target===this) closeModal()" role="dialog" aria-modal="true">
+  <div class="modal">
+    <button class="close" onclick="closeModal()" aria-label="Close dialog">✕</button>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<div class="toast-wrap" id="toast-wrap" role="status" aria-live="polite"></div>
+
+<script>
+/* ---------- shared helpers (used by every page) ---------- */
+const $ = id => document.getElementById(id);
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+async function api(url, method, body){
+  const resp = await fetch(url,{method:method||'GET',
+    headers:body?{'Content-Type':'application/json'}:{}, body:body?JSON.stringify(body):undefined});
+  const data = await resp.json().catch(()=>({}));
+  return {ok:resp.ok, status:resp.status, data};
+}
+function fmtTime(t){ return t ? new Date(t*1000).toLocaleString() : '—'; }
+function timeAgo(t){
+  const s = Math.max(1,(Date.now()/1000 - t));
+  if(s<60) return Math.round(s)+'s ago';
+  if(s<3600) return Math.round(s/60)+'m ago';
+  if(s<86400) return Math.round(s/3600)+'h ago';
+  return Math.round(s/86400)+'d ago';
+}
+/* lightweight toast notifications */
+function toast(msg, type){
+  const wrap = $('toast-wrap');
+  if(!wrap) return;
+  const el = document.createElement('div');
+  el.className = 'toast ' + (type||'info');
+  el.innerHTML = msg;
+  wrap.appendChild(el);
+  requestAnimationFrame(()=>el.classList.add('show'));
+  setTimeout(()=>{ el.classList.remove('show'); setTimeout(()=>el.remove(), 350); }, 4200);
+}
+/* one-click copy for IDs / passcodes */
+function copyText(txt, label){
+  navigator.clipboard.writeText(txt)
+    .then(()=>toast((label||'Copied')+': <b class="mono">'+esc(txt)+'</b>','ok'))
+    .catch(()=>prompt('Copy this value:', txt));
+}
+/* close modals with Escape */
+document.addEventListener('keydown', e => {
+  if(e.key === 'Escape'){
+    const m = document.querySelector('.modal-bg.open');
+    if(m) m.classList.remove('open');
+  }
+});
+function openModal(html){
+  $('modal-body').innerHTML = html;
+  $('modal-bg').classList.add('open');
+}
+function closeModal(){ $('modal-bg').classList.remove('open'); }
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>
