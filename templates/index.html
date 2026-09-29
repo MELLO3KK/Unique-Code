@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DM Code — a scannable code that looks like a QR but isn't</title>
+<style>
+  :root {
+    --ink: #1a237e;
+    --bg: #f4f6fb;
+    --card: #ffffff;
+    --accent: #4353ff;
+    --muted: #6b7280;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: #111827;
+  }
+  header {
+    background: linear-gradient(135deg, #1a237e, #4353ff);
+    color: white;
+    padding: 34px 20px 30px;
+    text-align: center;
+  }
+  header h1 { margin: 0 0 8px; font-size: 1.9rem; letter-spacing: .3px; }
+  header p { margin: 0 auto; max-width: 640px; opacity: .9; font-size: .98rem; }
+  .badge {
+    display: inline-block; margin-top: 12px; padding: 4px 12px;
+    border-radius: 999px; background: rgba(255,255,255,.16);
+    font-size: .8rem;
+  }
+  main {
+    max-width: 980px; margin: -20px auto 40px; padding: 0 16px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
+  }
+  @media (max-width: 760px) { main { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--card); border-radius: 14px; padding: 22px;
+    box-shadow: 0 8px 24px rgba(20, 30, 90, .08);
+  }
+  label { display: block; font-weight: 600; margin: 14px 0 6px; }
+  textarea {
+    width: 100%; min-height: 96px; resize: vertical;
+    padding: 10px 12px; border: 1.5px solid #d6dae6; border-radius: 10px;
+    font-size: 1rem; font-family: inherit;
+  }
+  textarea:focus { outline: none; border-color: var(--accent); }
+  select, input[type=range] { width: 100%; }
+  select {
+    padding: 9px 10px; border: 1.5px solid #d6dae6; border-radius: 10px;
+    background: white; font-size: .95rem;
+  }
+  .row { display: flex; gap: 14px; align-items: center; margin-top: 14px; }
+  .row label { margin: 0; white-space: nowrap; }
+  button.primary {
+    margin-top: 18px; width: 100%; padding: 13px;
+    font-size: 1.05rem; font-weight: 700; color: white;
+    background: var(--accent); border: none; border-radius: 10px; cursor: pointer;
+  }
+  button.primary:hover { filter: brightness(1.08); }
+  a.dl {
+    display: block; text-align: center; margin-top: 12px;
+    color: var(--accent); font-weight: 600; text-decoration: none;
+  }
+  #preview {
+    display: flex; align-items: center; justify-content: center;
+    min-height: 320px; border: 2px dashed #d6dae6; border-radius: 12px;
+    background: repeating-linear-gradient(45deg, #fafbff, #fafbff 12px, #f2f4fb 12px, #f2f4fb 24px);
+  }
+  #preview img { max-width: 100%; border-radius: 8px; }
+  #preview .hint { color: var(--muted); padding: 20px; text-align: center; }
+  #status { margin-top: 12px; font-size: .92rem; min-height: 1.2em; }
+  #status.ok { color: #0a7d33; }
+  #status.err { color: #c62828; }
+  .note {
+    grid-column: 1 / -1; background: #eef1ff; border-left: 5px solid var(--accent);
+    padding: 16px 20px; border-radius: 10px; font-size: .95rem; line-height: 1.55;
+  }
+  .note strong { color: var(--ink); }
+  footer { text-align: center; color: var(--muted); font-size: .85rem; margin-bottom: 30px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>DM&nbsp;Code Generator</h1>
+  <p>Create an image that <em>looks</em> like a QR code but is <strong>not</strong> one —
+     it's a Data&nbsp;Matrix barcode with rounded, QR-style modules.
+     Every common scanner app (Google&nbsp;Lens, iOS Camera, any ZXing-based reader) can scan it.</p>
+  <span class="badge">✓ every generated image is decoded back and verified before you see it</span>
+</header>
+
+<main>
+  <section class="card">
+    <form id="gen-form" onsubmit="return generate(event)">
+      <label for="text">Message or URL</label>
+      <textarea id="text" placeholder="https://example.com/hello">{{ 'Hello! This looks like a QR code, but I am actually a Data Matrix symbol. 📷' }}</textarea>
+      <div style="font-size:.8rem;color:var(--muted);margin-top:4px;">Max {{ max_bytes }} bytes of UTF-8 text.</div>
+
+      <label for="style">Color style</label>
+      <select id="style">
+        {% for key, (label, fg, bg) in styles.items() %}
+          <option value="{{ key }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+
+      <div class="row">
+        <label for="scale">Size</label>
+        <input type="range" id="scale" min="6" max="18" value="10">
+      </div>
+      <div class="row">
+        <label for="rounded">Rounded (QR-like) modules</label>
+        <input type="checkbox" id="rounded" checked>
+      </div>
+
+      <button class="primary" type="submit">Generate my code</button>
+    </form>
+    <div id="status"></div>
+  </section>
+
+  <section class="card">
+    <div id="preview"><div class="hint">Your scannable code will appear here.<br>Click <b>Generate</b> to create one.</div></div>
+    <a id="download" class="dl" style="display:none" download="dm-code.png">⬇ Download PNG</a>
+  </section>
+
+  <section class="note">
+    <strong>Why it's not a QR code:</strong> QR codes have three big square
+    "finder patterns" in the corners and use Reed–Solomon on a different grid.
+    A Data&nbsp;Matrix (ISO/IEC 16022, ECC200) instead has an L-shaped solid
+    bar on two edges and a dashed "clock track" on the other two — more compact,
+    just as scannable, and loved by factory marking systems. Point your phone
+    camera at the generated image (or paste the page URL into another device)
+    to prove it decodes. The server also decodes every image it renders and
+    shows the check result below.
+  </section>
+</main>
+
+<footer>Built with Flask · zxing-cpp · Pillow</footer>
+
+<script>
+async function generate(ev) {
+  ev.preventDefault();
+  const status = document.getElementById('status');
+  const preview = document.getElementById('preview');
+  const dl = document.getElementById('download');
+  status.className = ''; status.textContent = 'Generating…';
+
+  const params = new URLSearchParams({
+    text: document.getElementById('text').value.trim(),
+    style: document.getElementById('style').value,
+    scale: document.getElementById('scale').value,
+    rounded: document.getElementById('rounded').checked ? '1' : '0',
+  });
+  if (!params.get('text')) {
+    status.className = 'err'; status.textContent = 'Please enter some text first.';
+    return false;
+  }
+
+  try {
+    const resp = await fetch('/image?' + params.toString());
+    if (!resp.ok) {
+      const msg = await resp.text();
+      throw new Error(msg || ('Server error ' + resp.status));
+    }
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    preview.innerHTML = '';
+    const img = new Image();
+    img.src = url;
+    img.alt = 'Generated DM code';
+    preview.appendChild(img);
+    dl.href = url; dl.style.display = 'block';
+    status.className = 'ok';
+    status.textContent = '✔ Generated and verified scannable on the server. Scan it with your phone!';
+  } catch (e) {
+    status.className = 'err';
+    status.textContent = '✖ ' + e.message;
+  }
+  return false;
+}
+// generate one on load so the page isn't empty
+window.addEventListener('DOMContentLoaded', () => generate(new Event('submit')));
+</script>
+</body>
+</html>
