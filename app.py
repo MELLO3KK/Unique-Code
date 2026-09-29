@@ -13,11 +13,14 @@ Every generated code now carries a UNIQUE ID protected by a PASSCODE:
                                (the correct passcode is REQUIRED)
 """
 
-from flask import Flask, render_template, request, Response, jsonify, session
+from flask import (Flask, render_template, request, Response, jsonify,
+                   session, redirect)
+from urllib.parse import quote
 
 import brands
 import codes
 import dmcode
+import authenticity
 
 app = Flask(__name__)
 app.secret_key = codes.load_secret_key()
@@ -300,6 +303,121 @@ def product_image(pid):
     except dmcode.DMCodeError as exc:
         return Response(str(exc), status=400, mimetype="text/plain")
     return Response(dmcode.to_png_bytes(img), mimetype="image/png")
+
+
+# --------------------------------------------------------------------------
+# Product authenticity: register genuine units -> verify by scan + passcode
+# --------------------------------------------------------------------------
+@app.get("/verify")
+@app.get("/verify/<serial>")
+def verify_page(serial=""):
+    """The customer-facing page a scanned product code opens."""
+    prefill = (serial or request.args.get("serial", "")).strip().upper()
+    return render_template("verify.html", prefill=prefill)
+
+
+@app.post("/api/verify")
+def api_verify():
+    """Verify a product: serial (from the scanned code) + printed passcode."""
+    body = request.get_json(silent=True) or {}
+    try:
+        verdict = authenticity.store.verify(
+            body.get("serial", ""),
+            body.get("passcode", ""),
+            ip=_client_ip(),
+        )
+    except authenticity.AuthenticityError as exc:
+        msg = str(exc)
+        status = 404 if "exists" in msg else 400
+        return jsonify(result="ERROR", authentic=False, error=msg, message=msg), status
+    status = 200 if verdict["result"] in ("AUTHENTIC", "AUTHENTIC_BUT_RESELLER") else 403
+    return jsonify(verdict), status
+
+
+@app.get("/api/auth/info/<serial>")
+def auth_info(serial):
+    """Public info shown right after scanning, BEFORE entering the passcode."""
+    try:
+        unit = authenticity.store.get_unit(serial)
+    except authenticity.AuthenticityError as exc:
+        return jsonify(error=str(exc)), 404
+    brand_name = None
+    try:
+        brand_name = brands.store.get_brand(unit["brand"])["name"]
+    except brands.BrandError:
+        pass
+    unit["brand_name"] = brand_name
+    unit["product_url"] = f"/v/{unit['serial']}"
+    unit["image_url"] = f"/a/{unit['serial']}.png"
+    unit.pop("last_verified", None)  # customer privacy
+    return jsonify(unit)
+
+
+@app.post("/api/brands/<handle>/units")
+def register_units(handle):
+    """A brand registers genuine product units (batch). Brand passcode required.
+
+    Returns each unit's serial + its printing passcode — shown ONCE so the
+    brand can put them on the packaging / tamper stickers.
+    """
+    body = request.get_json(silent=True) or {}
+    try:
+        record = brands.store.authenticate_brand(
+            handle, body.get("passcode", ""), ip=_client_ip()
+        )
+        units = authenticity.store.register_units(
+            brand_handle=record["handle"],
+            brand_passcode_hash=record["passcode_hash"],
+            brand_salt=record["salt"],
+            title=body.get("title", ""),
+            quantity=body.get("quantity", 1),
+        )
+    except (brands.BrandError, authenticity.AuthenticityError) as exc:
+        msg = str(exc)
+        m = msg.lower()
+        status = 404 if ("exists" in m or "no brand" in m) else 403 if "passcode" in m else 400
+        return jsonify(error=msg), status
+    return jsonify({"brand": record["handle"], "count": len(units), "units": units}), 201
+
+
+@app.get("/api/brands/<handle>/units")
+def brand_units(handle):
+    """The brand's registered units with verification stats (public summary)."""
+    try:
+        brands.store.get_brand(handle)  # 404 if unknown brand
+    except brands.BrandError as exc:
+        return jsonify(error=str(exc)), 404
+    units = authenticity.store.list_for_brand(handle)
+    for u in units:
+        u.pop("last_verified", None)  # keep customer privacy on the public list
+    return jsonify({"summary": authenticity.store.brand_summary(handle), "units": units})
+
+
+@app.get("/a/<serial>.png")
+@app.get("/a/<serial>")
+def unit_image(serial):
+    """The printable code image whose payload is the customer URL /v/<SERIAL>."""
+    try:
+        unit = authenticity.store.get_unit(serial)
+    except authenticity.AuthenticityError as exc:
+        return Response(str(exc), status=404, mimetype="text/plain")
+    style = "classic"
+    try:
+        style = brands.store.get_brand(unit["brand"]).get("style", "classic")
+    except brands.BrandError:
+        pass
+    url = request.url_root.rstrip("/") + "/v/" + unit["serial"]
+    try:
+        img = dmcode.generate(url, style=style, scale=10)
+    except dmcode.DMCodeError as exc:
+        return Response(str(exc), status=400, mimetype="text/plain")
+    return Response(dmcode.to_png_bytes(img), mimetype="image/png")
+
+
+@app.get("/v/<serial>")
+def unit_landing(serial):
+    """Where a phone lands after scanning the printed code: the verify page."""
+    return redirect("/verify?serial=" + quote((serial or "").strip().upper()))
 
 
 @app.route("/image")

@@ -1,1 +1,10 @@
-(empty)
+# Compiled and cache files
+__pycache__/
+*.pyc
+
+# Logs
+server.log
+*.log
+
+# Environment/Sensitive
+.flask_secret_key
