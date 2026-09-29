@@ -35,9 +35,15 @@ def _text_to_matrix(text: str) -> np.ndarray:
         raise DMCodeError(f"Could not encode the message: {bc.error}")
 
     img = bc.to_image(1)  # 1 pixel per module
-    arr = np.array(img.pix if hasattr(img, "pix") else np.asarray(img))
+    arr = np.asarray(img)
+    # zxing-cpp's to_image() adds a one-module white margin around the symbol;
+    # crop back to the actual module grid via the bounding box of dark pixels.
     matrix = arr == 0  # zxing renders dark modules as 0
-    return matrix
+    rows = np.where(matrix.any(axis=1))[0]
+    cols = np.where(matrix.any(axis=0))[0]
+    if len(rows) == 0 or len(cols) == 0:
+        raise DMCodeError("Could not extract the module grid from the encoding.")
+    return matrix[rows.min():rows.max() + 1, cols.min():cols.max() + 1]
 
 
 def render(
@@ -51,9 +57,14 @@ def render(
     """Draw the module matrix as a QR-styled RGB image (rounded modules)."""
     rows, cols = matrix.shape
     pad = quiet_zone * scale
-    size = rows * scale + 2 * pad  # matrix is square for DM square symbols
+    if rounded:
+        # Rounded dots break Data Matrix edge-detection on rectangular
+        # symbols, so keep the QR-like look only for square symbols.
+        rounded = rows == cols
+    width = cols * scale + 2 * pad
+    height = rows * scale + 2 * pad
 
-    img = Image.new("RGB", (size, size), bg)
+    img = Image.new("RGB", (width, height), bg)
     draw = ImageDraw.Draw(img)
 
     inset = 1 if rounded else 0
@@ -70,7 +81,11 @@ def render(
             if rounded and radius > 0:
                 draw.rounded_rectangle([x0, y0, x1, y1], radius=radius, fill=fg)
             else:
-                draw.rectangle([x0, y0, x1, y1], fill=fg)
+                # Fill exactly the module cell (inclusive end coords) so
+                # neighbouring dark modules merge into solid bars.
+                draw.rectangle([pad + c * scale, pad + r * scale,
+                                pad + (c + 1) * scale - 1,
+                                pad + (r + 1) * scale - 1], fill=fg)
     return img
 
 
