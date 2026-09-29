@@ -81,6 +81,33 @@
   }
   .note strong { color: var(--ink); }
   footer { text-align: center; color: var(--muted); font-size: .85rem; margin-bottom: 30px; }
+  input[type=text], input[type=password] {
+    width: 100%; padding: 10px 12px; border: 1.5px solid #d6dae6; border-radius: 10px;
+    font-size: 1rem; font-family: inherit;
+  }
+  input[type=text]:focus, input[type=password]:focus { outline: none; border-color: var(--accent); }
+  .subtabs { display: flex; gap: 8px; margin-bottom: 4px; }
+  .subtabs button {
+    flex: 1; padding: 9px 6px; border: 1.5px solid #d6dae6; border-radius: 9px;
+    background: #f7f8fd; font-weight: 600; cursor: pointer; font-size: .92rem;
+  }
+  .subtabs button.active { background: var(--accent); border-color: var(--accent); color: white; }
+  .codebox {
+    margin-top: 14px; padding: 12px 14px; border-radius: 10px; background: #eef1ff;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; word-break: break-all;
+    font-size: .95rem; line-height: 1.5;
+  }
+  .codebox b { color: var(--ink); }
+  .chips { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; font-size: .82rem; }
+  .chip { padding: 3px 10px; border-radius: 999px; background: #e5f7ea; color: #0a7d33; font-weight: 600; }
+  .chip.none { background: #fdecea; color: #c62828; }
+  .hint-small { font-size: .8rem; color: var(--muted); margin-top: 4px; }
+  button.secondary {
+    margin-top: 14px; width: 100%; padding: 11px;
+    font-size: .98rem; font-weight: 700; color: var(--accent);
+    background: white; border: 2px solid var(--accent); border-radius: 10px; cursor: pointer;
+  }
+  button.secondary:hover { background: #eef1ff; }
 </style>
 </head>
 <body>
@@ -94,10 +121,19 @@
 
 <main>
   <section class="card">
-    <form id="gen-form" onsubmit="return generate(event)">
+    <div class="subtabs">
+      <button type="button" id="tab-new" class="active" onclick="showTab('new')">1 · Create unique ID</button>
+      <button type="button" id="tab-manage" onclick="showTab('manage')">2 · Change it (passcode)</button>
+    </div>
+
+    <!-- ============ CREATE ============ -->
+    <form id="create-form" onsubmit="return createCode(event)">
       <label for="text">Message or URL</label>
       <textarea id="text" placeholder="https://example.com/hello">{{ 'Hello! This looks like a QR code, but I am actually a Data Matrix symbol. 📷' }}</textarea>
       <div style="font-size:.8rem;color:var(--muted);margin-top:4px;">Max {{ max_bytes }} bytes of UTF-8 text.</div>
+
+      <label for="owner">Owner name <span style="font-weight:400;color:var(--muted)">(optional — the ID can also stay ownerless)</span></label>
+      <input type="text" id="owner" placeholder="e.g. alice (leave empty for no owner)">
 
       <label for="style">Color style</label>
       <select id="style">
@@ -106,82 +142,204 @@
         {% endfor %}
       </select>
 
-      <div class="row">
-        <label for="scale">Size</label>
-        <input type="range" id="scale" min="6" max="18" value="10">
-      </div>
-      <div class="row">
-        <label for="rounded">Rounded (QR-like) modules</label>
-        <input type="checkbox" id="rounded" checked>
-      </div>
-
-      <button class="primary" type="submit">Generate my code</button>
+      <button class="primary" type="submit">Create my unique ID</button>
+      <div class="hint-small">A random unique ID and its passcode will be generated. The passcode is shown <b>once</b> — save it! It is the only way to change this ID later.</div>
     </form>
+
+    <!-- ============ CHANGE ============ -->
+    <form id="manage-form" style="display:none" onsubmit="return lookupCode(event)">
+      <label for="uid">Unique ID</label>
+      <input type="text" id="uid" placeholder="paste the unique ID here">
+
+      <div id="manage-details"></div>
+
+      <div id="change-fields" style="display:none">
+        <label for="passcode">Passcode <span style="font-weight:400;color:var(--muted)">(required to change anything)</span></label>
+        <input type="password" id="passcode" autocomplete="off" placeholder="your 10-character passcode">
+
+        <label for="new-message">New message</label>
+        <textarea id="new-message" placeholder="leave empty to keep the current message"></textarea>
+
+        <label for="new-owner">New owner</label>
+        <input type="text" id="new-owner" placeholder="set / change owner; type “-” to remove owner">
+
+        <label for="new-passcode">New passcode <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+        <input type="text" id="new-passcode" placeholder="leave empty to keep your current passcode">
+
+        <button class="primary" type="button" onclick="changeCode()">Change this unique ID</button>
+      </div>
+      <button class="secondary" id="lookup-btn" type="submit">Look up unique ID</button>
+    </form>
+
     <div id="status"></div>
   </section>
 
   <section class="card">
-    <div id="preview"><div class="hint">Your scannable code will appear here.<br>Click <b>Generate</b> to create one.</div></div>
+    <div id="preview"><div class="hint">Your scannable code will appear here.<br>Create a unique ID to get one.</div></div>
+    <div id="idbox"></div>
     <a id="download" class="dl" style="display:none" download="dm-code.png">⬇ Download PNG</a>
   </section>
 
   <section class="note">
-    <strong>Why it's not a QR code:</strong> QR codes have three big square
-    "finder patterns" in the corners and use Reed–Solomon on a different grid.
-    A Data&nbsp;Matrix (ISO/IEC 16022, ECC200) instead has an L-shaped solid
-    bar on two edges and a dashed "clock track" on the other two — more compact,
-    just as scannable, and loved by factory marking systems. Point your phone
-    camera at the generated image (or paste the page URL into another device)
-    to prove it decodes. The server also decodes every image it renders and
-    shows the check result below.
+    <strong>How unique IDs &amp; passcodes work:</strong> every code you create gets a
+    random <strong>unique ID</strong> — that ID is what the Data&nbsp;Matrix image actually
+    encodes, so scanning it reveals the ID, not your secret message. Each ID has a
+    <strong>passcode</strong> and may have an <strong>owner</strong> (or none at all).
+    Anyone can <em>look up</em> an ID to see whether it has an owner, but to
+    <strong>change</strong> the ID's message, owner, style or passcode you must enter the
+    correct passcode — wrong passcodes are rejected (and rate-limited after repeated tries).
   </section>
 </main>
 
 <footer>Built with Flask · zxing-cpp · Pillow</footer>
 
 <script>
-async function generate(ev) {
-  ev.preventDefault();
-  const status = document.getElementById('status');
+const statusEl = () => document.getElementById('status');
+
+function setStatus(cls, msg) {
+  const s = statusEl();
+  s.className = cls;
+  s.textContent = msg;
+}
+
+function showTab(which) {
+  document.getElementById('create-form').style.display = which === 'new' ? '' : 'none';
+  document.getElementById('manage-form').style.display = which === 'manage' ? '' : 'none';
+  document.getElementById('tab-new').className = which === 'new' ? 'active' : '';
+  document.getElementById('tab-manage').className = which === 'manage' ? 'active' : '';
+  setStatus('', '');
+}
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function showCodeImage(uid) {
   const preview = document.getElementById('preview');
   const dl = document.getElementById('download');
-  status.className = ''; status.textContent = 'Generating…';
+  preview.innerHTML = '';
+  const img = new Image();
+  img.src = '/c/' + encodeURIComponent(uid) + '.png';
+  img.alt = 'DM code for unique ID ' + uid;
+  preview.appendChild(img);
+  dl.href = '/c/' + encodeURIComponent(uid) + '.png';
+  dl.setAttribute('download', 'dm-code-' + uid + '.png');
+  dl.style.display = 'block';
+  document.getElementById('idbox').innerHTML =
+    '<div class="codebox"><b>Unique ID:</b> ' + escapeHtml(uid) + '</div>';
+}
 
-  const params = new URLSearchParams({
-    text: document.getElementById('text').value.trim(),
-    style: document.getElementById('style').value,
-    scale: document.getElementById('scale').value,
-    rounded: document.getElementById('rounded').checked ? '1' : '0',
-  });
-  if (!params.get('text')) {
-    status.className = 'err'; status.textContent = 'Please enter some text first.';
-    return false;
-  }
+async function createCode(ev) {
+  ev.preventDefault();
+  const message = document.getElementById('text').value.trim();
+  if (!message) { setStatus('err', 'Please enter some text first.'); return false; }
 
+  setStatus('', 'Creating your unique ID…');
   try {
-    const resp = await fetch('/image?' + params.toString());
-    if (!resp.ok) {
-      const msg = await resp.text();
-      throw new Error(msg || ('Server error ' + resp.status));
-    }
-    const blob = await resp.blob();
-    const url = URL.createObjectURL(blob);
-    preview.innerHTML = '';
-    const img = new Image();
-    img.src = url;
-    img.alt = 'Generated DM code';
-    preview.appendChild(img);
-    dl.href = url; dl.style.display = 'block';
-    status.className = 'ok';
-    status.textContent = '✔ Generated and verified scannable on the server. Scan it with your phone!';
+    const resp = await fetch('/api/codes', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        message,
+        owner: document.getElementById('owner').value.trim(),
+        style: document.getElementById('style').value,
+      }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || ('Server error ' + resp.status));
+
+    showCodeImage(data.id);
+    setStatus('ok',
+      '✔ Unique ID created. SAVE YOUR PASSCODE — it is shown only once and is required to change this ID: '
+      + data.passcode);
+    document.getElementById('idbox').insertAdjacentHTML('beforeend',
+      '<div class="codebox" style="background:#fff7e0"><b>Your passcode (shown once):</b> '
+      + escapeHtml(data.passcode)
+      + '<br><b>Owner:</b> ' + (data.has_owner ? escapeHtml(data.owner) : 'none')
+      + '<br>Keep the passcode safe — without it this ID can never be changed.</div>');
+    // Pre-fill the manage tab for convenience
+    document.getElementById('uid').value = data.id;
+    document.getElementById('passcode').value = data.passcode;
   } catch (e) {
-    status.className = 'err';
-    status.textContent = '✖ ' + e.message;
+    setStatus('err', '✖ ' + e.message);
   }
   return false;
 }
-// generate one on load so the page isn't empty
-window.addEventListener('DOMContentLoaded', () => generate(new Event('submit')));
+
+async function lookupCode(ev) {
+  ev.preventDefault();
+  const uid = document.getElementById('uid').value.trim();
+  if (!uid) { setStatus('err', 'Enter a unique ID to look up.'); return false; }
+  setStatus('', 'Looking up ' + uid + '…');
+  try {
+    const resp = await fetch('/api/codes/' + encodeURIComponent(uid));
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || ('Server error ' + resp.status));
+
+    document.getElementById('manage-details').innerHTML =
+      '<div class="chips">'
+      + (data.has_owner
+          ? '<span class="chip">👤 owned by ' + escapeHtml(data.owner) + '</span>'
+          : '<span class="chip none">no owner</span>')
+      + '<span class="chip" style="background:#eef1ff;color:#1a237e">style: ' + escapeHtml(data.style) + '</span>'
+      + '</div>'
+      + '<div class="codebox"><b>Message:</b> ' + escapeHtml(data.message) + '</div>';
+    document.getElementById('change-fields').style.display = '';
+    document.getElementById('lookup-btn').textContent = 'Look up again';
+    showCodeImage(uid);
+    setStatus('ok', '✔ Found it. To change anything about this ID, enter its passcode below.');
+  } catch (e) {
+    document.getElementById('manage-details').innerHTML = '';
+    document.getElementById('change-fields').style.display = 'none';
+    setStatus('err', '✖ ' + e.message);
+  }
+  return false;
+}
+
+async function changeCode() {
+  const uid = document.getElementById('uid').value.trim();
+  const passcode = document.getElementById('passcode').value.trim();
+  if (!uid) { setStatus('err', 'No unique ID entered.'); return; }
+  if (!passcode) { setStatus('err', '✖ A passcode is required to change this unique ID.'); return; }
+
+  const body = { passcode };
+  const msg = document.getElementById('new-message').value.trim();
+  const own = document.getElementById('new-owner').value.trim();
+  const np  = document.getElementById('new-passcode').value.trim();
+  if (msg) body.message = msg;
+  if (own) body.owner = (own === '-') ? '' : own;
+  if (np)  body.new_passcode = np;
+
+  setStatus('', 'Verifying passcode and applying changes…');
+  try {
+    const resp = await fetch('/api/codes/' + encodeURIComponent(uid) + '/change', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || ('Server error ' + resp.status));
+
+    document.getElementById('manage-details').innerHTML =
+      '<div class="chips">'
+      + (data.has_owner
+          ? '<span class="chip">👤 owned by ' + escapeHtml(data.owner) + '</span>'
+          : '<span class="chip none">no owner</span>')
+      + '</div><div class="codebox"><b>Message:</b> ' + escapeHtml(data.message) + '</div>';
+    showCodeImage(uid);
+    if (data.passcode) {
+      document.getElementById('passcode').value = data.passcode;
+      setStatus('ok', '✔ Changed! New passcode (save it, shown once): ' + data.passcode);
+    } else {
+      setStatus('ok', '✔ Passcode accepted — the unique ID has been updated.');
+    }
+    document.getElementById('new-message').value = '';
+    document.getElementById('new-owner').value = '';
+    document.getElementById('new-passcode').value = '';
+  } catch (e) {
+    setStatus('err', '✖ ' + e.message);
+  }
+}
 </script>
 </body>
 </html>
