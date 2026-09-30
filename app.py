@@ -362,109 +362,129 @@ def _dm_random_bit(row: int, col: int, height: int, width: int) -> bool:
 
 
 def _dm_module_positions(rows: int, cols: int) -> list[tuple[int, int]]:
-    """Mapping-matrix traversal order (ISO/IEC 16022 §A.2 / Annex B).
+    """Mapping-matrix traversal order (ISO/IEC 16022 Annex D).
 
     Returns one (row, col) per module-bit in codeword order, MSB first —
     exactly ``rows*cols`` positions, each used once.  Implements the
     classic diagonal "streak" walk plus the four corner cases that wrap
-    around symbol edges.
+    around symbol edges.  All coordinates are taken modulo the mapping
+    matrix, matching the reference implementation ("utah" placement).
     """
     grid = [[False] * cols for _ in range(rows)]
     order: list[tuple[int, int]] = []
 
-    def on(r, c):
-        return 0 <= r < rows and 0 <= c < cols
+    def row_sub(i):
+        return (i + rows) % rows
+
+    def col_sub(j):
+        return (j + cols) % cols
 
     def put(r, c):
-        if on(r, c) and not grid[r][c]:
+        if not grid[r][c]:
             grid[r][c] = True
             order.append((r, c))
 
-    def put_rel(ar, ac, offsets):
-        for dr, dc in offsets:
-            put(ar + dr, ac + dc)
+    def corner1():
+        # (r-1+R, c-1), (r-1+R, c), (R, c), (R, c+1), (R, c+2),
+        # (r, c+2-C), (r+1, c+2-C), (r+2, c+2-C)   with r=R-1, c=0
+        put(row_sub(rows - 2), col_sub(cols - 1))
+        put(row_sub(rows - 2), 0)
+        put(row_sub(rows - 1), 0)
+        put(0, 1)
+        put(0, 2)
+        put(1, cols - 2)
+        put(2, cols - 2)
+        put(3, cols - 2)
 
-    COMMON = [(-1, 1), (0, 2), (1, 3), (2, 3), (3, 2), (4, 1), (5, 0), (6, 0)]
+    def corner2():
+        # r=0, c=C-4
+        put(row_sub(rows - 1), 0)
+        put(row_sub(rows - 1), col_sub(cols - 1))
+        put(0, col_sub(cols - 3))
+        put(0, col_sub(cols - 2))
+        put(0, col_sub(cols - 1))
+        put(1, col_sub(cols - 3))
+        put(1, col_sub(cols - 2))
+        put(1, col_sub(cols - 1))
+
+    def corner3():
+        # r=R-1, c=2, R%8==0, C==8
+        put(row_sub(rows - 1), 0)
+        put(row_sub(rows - 1), col_sub(cols - 1))
+        put(0, col_sub(cols - 3))
+        put(0, col_sub(cols - 2))
+        put(0, col_sub(cols - 1))
+        put(1, col_sub(cols - 3))
+        put(1, col_sub(cols - 2))
+        put(1, col_sub(cols - 1))
+
+    def corner4():
+        # r=R-3, c=0, R%8==0, C==8
+        put(row_sub(rows - 3), 0)
+        put(row_sub(rows - 2), 0)
+        put(row_sub(rows - 1), 0)
+        put(row_sub(rows - 1), 1)
+        put(row_sub(rows - 1), 2)
+        put(0, col_sub(cols - 4))
+        put(0, col_sub(cols - 3))
+        put(0, col_sub(cols - 2))
+
+    def utah(r, c):
+        """Standard 'utah' stamp of 8 bits anchored at (r, c)."""
+        put(row_sub(r - 1), col_sub(c + 1))
+        put(row_sub(r - 1), col_sub(c + 2))
+        put(row_sub(r), col_sub(c + 2))
+        put(row_sub(r + 1), col_sub(c + 2))
+        put(row_sub(r + 2), col_sub(c + 1))
+        put(row_sub(r + 2), col_sub(c))
+        put(row_sub(r + 3), col_sub(c))
+        put(row_sub(r + 4), col_sub(c))
+
+    def place(r, c):
+        if r == rows - 1 and c == 0:                       # corner case 1
+            corner1()
+        elif r == rows - 1 and c == 2 and rows % 8 == 0 and cols == 8:
+            corner3()                                       # corner case 3
+        elif r == rows - 3 and c == 0 and rows % 8 == 0 and cols == 8:
+            corner4()                                       # corner case 4
+        elif r == 0 and c == cols - 4:                      # corner case 2
+            corner2()
+        else:
+            utah(r, c)
 
     def undamaged(r, c):
-        # Standard placement applies only when every in-grid neighbour of
-        # the streak is still unplaced; otherwise this position belongs to
-        # a previous corner-case wrap and must be skipped.
-        return all(not grid[r + dr][c + dc]
-                   for dr, dc in COMMON if on(r + dr, c + dc))
+        return not (grid[row_sub(r + 2)][col_sub(c - 1)]
+                    or grid[row_sub(r + 2)][c]
+                    or grid[row_sub(r + 2)][col_sub(c + 1)]
+                    or grid[r][col_sub(c - 1)])
 
-    def forward_step():
-        # Move from the anchor of one placed codeword to the next anchor.
-        nonlocal r, c
-        nr, nc = r - 1, c + 2
-        if not on(nr, nc):
-            nr, nc = r + 2, c - 1
-        if not on(nr, nc):
-            nr, nc = r + 1, c - 2
-        if not on(nr, nc):
-            # No valid anchor remains: resume at the first unplaced module,
-            # scanning column-major (the standard encoder behaviour).
-            rr = cc = None
-            for ci in range(cols):
-                found = False
-                for ri in range(rows):
-                    if not grid[ri][ci]:
-                        rr, cc, found = ri, ci, True
-                        break
-                if found:
-                    break
-            if rr is None:
-                return False
-            r, c = rr, cc
-            while not undamaged(r, c):
-                r, c = r + 1, c + 2
-                if not on(r, c):
-                    r, c = r + 2, c - 1
-                    if not on(r, c):
-                        r, c = r + 1, c - 2
-                        if not on(r, c):
-                            return False
-            return True
-        r, c = nr, nc
-        return True
+    # --- main sweep over the interior triangular region -----------------
+    row, col = 4, 0
+    while row < rows and col < cols:
+        if undamaged(row, col):
+            r, c = row, col
+            i = 0
+            while r >= 0 and c < cols and not grid[r][c]:
+                place(r, c)
+                i += 1
+                r -= 1
+                c += 2
+                r, c = row_sub(rows - i), col_sub(2 * i)
+        row, col = row + 2, col + 2
 
-    r, c = 4, 0
-    while len(order) < rows * cols:
-        if r == rows - 1 and c == 0:               # corner case 1
-            put_rel(r, c, [(-1, 1), (0, 2), (1, 3), (2, 3), (3, 2), (4, 1)])
-            put(rows - 2, cols - 2)
-            put(rows - 2, cols - 1)
-            put(rows - 1, cols - 2)
-            put(rows - 1, cols - 1)
-        elif r == rows - 1 and c == 2 and rows % 8 == 0 and cols == 8:
-            # corner case 3 (only reachable for 8-column symbols)
-            put_rel(r, c, [(-1, 1), (0, 2), (1, 3), (2, 3), (3, 2), (4, 1)])
-            put(rows - 2, 0)
-            put(rows - 1, 0)
-            put(0, cols - 4)
-            put(0, cols - 3)
-        elif r == rows - 3 and c == 0 and rows % 8 == 0 and cols == 8:
-            # corner case 4 (only reachable for 8-column symbols)
-            put(rows - 3, 0)
-            put(rows - 2, 0)
-            put(rows - 1, 0)
-            put(rows - 1, 1)
-            put(rows - 1, 2)
-            put(rows - 1, 3)
-            put(0, cols - 4)
-            put(0, cols - 3)
-        elif r == 0 and c == cols - 4 and not (4 <= cols <= 8):
-            # corner case 2
-            put_rel(r, c, [(3, 2), (4, 1), (5, 0), (6, 0)])
-            put_rel(r + 4, c - 1, [(-1, 1), (0, 2), (1, 3), (2, 3)])
-            put(1, 0)
-            put(2, 0)
-            put(3, 0)
-            put(4, 0)
-        elif undamaged(r, c):
-            put_rel(r, c, COMMON)
-        if not forward_step():
-            break
+    # --- bottom-left triangle --------------------------------------------
+    row, col = rows - 1, 1
+    while col < cols and not grid[rows - 1][col]:
+        if undamaged(row, col):
+            r, c = row, col
+            i = 0
+            while r < rows and c < cols and not grid[r][c]:
+                place(r, c)
+                i += 1
+                r += 1
+                c += 2
+                r, c = row_sub((rows - 1 + i) % rows), col_sub(2 * i)
+        row, col = row - 2, col + 2
 
     assert len(order) == rows * cols, \
         f"mapping produced {len(order)} of {rows * cols} positions"
