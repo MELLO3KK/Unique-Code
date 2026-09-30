@@ -15,6 +15,7 @@ Security model:
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import os
@@ -37,7 +38,13 @@ from flask import (
     url_for,
 )
 from PIL import Image, ImageDraw, ImageFont
-from pylibdmtx.pylibdmtx import encode as dmtx_encode
+
+try:
+    from pylibdmtx.pylibdmtx import encode as dmtx_encode
+    DMTX_AVAILABLE = True
+except Exception:  # libdmtx shared library missing (common on Windows)
+    dmtx_encode = None
+    DMTX_AVAILABLE = False
 
 # --------------------------------------------------------------------------
 # Configuration
@@ -45,6 +52,20 @@ from pylibdmtx.pylibdmtx import encode as dmtx_encode
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.environ.get("PROVEN_DB", os.path.join(BASE_DIR, "proven.db"))
+
+# pylibdmtx is a wrapper around the native libdmtx shared library.  On
+# Windows the DLL (e.g. libdmtx-64.dll) must be on PATH or sitting next
+# to app.py; register this directory so a local copy is found first
+# (Python 3.8+ changed native DLL loading semantics), then retry the
+# import if it failed above.
+if os.name == "nt" and not DMTX_AVAILABLE:
+    try:
+        os.add_dll_directory(BASE_DIR)
+        from pylibdmtx.pylibdmtx import encode as dmtx_encode
+        DMTX_AVAILABLE = True
+    except Exception:
+        dmtx_encode = None
+        DMTX_AVAILABLE = False
 
 PBKDF2_ITERATIONS = 200_000
 RATE_LIMIT_WINDOW = 60.0          # seconds
@@ -235,8 +256,43 @@ def build_payload(serial: str, passcode: str) -> str:
     return f"{base}/verify?serial={serial}&key={passcode}"
 
 
+# Font candidates across platforms (Linux / Windows / macOS).  PIL also
+# accepts bare family names like "arialbd.ttf" which it resolves through
+# the Windows font registry (HKLM SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts).
+_FONT_CANDIDATES = (
+    # Windows
+    "arialbd.ttf",
+    r"C:\Windows\Fonts\arialbd.ttf",
+    r"C:\Windows\Fonts\segoeuib.ttf",
+    r"C:\Windows\Fonts\calibrib.ttf",
+    # Linux
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    # macOS
+    "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+    "/Library/Fonts/Arial Bold.ttf",
+)
+
+
+def _load_badge_font(size: int = 16):
+    for path in _FONT_CANDIDATES:
+        try:
+            return ImageFont.truetype(path, size)
+        except OSError:
+            continue
+    return ImageFont.load_default()
+
+
 def render_dm_badge(payload: str) -> Image.Image:
-    """Render a Data Matrix symbol inside a QR-style rounded badge."""
+    """Render a Data Matrix symbol inside a QR-style rounded badge.
+
+    Falls back to a placeholder badge when the native libdmtx shared
+    library is unavailable (e.g. ``pylibdmtx`` installed via pip on
+    Windows without libdmtx.dll on PATH — see README-Windows notes).
+    """
+    if not DMTX_AVAILABLE:
+        return _render_placeholder_badge(payload)
+
     # Pick the smallest square DM size that fits the payload, then upscale.
     last_err = None
     enc = None
@@ -270,11 +326,27 @@ def render_dm_badge(payload: str) -> Image.Image:
     badge.paste(sym, (pad, pad))
 
     label = "PROVEN · DM CODE"
-    try:
-        font = ImageFont.truetype(
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 16)
-    except OSError:
-        font = ImageFont.load_default()
+    font = _load_badge_font(16)
+    tw = draw.textlength(label, font=font)
+    draw.text(((side - tw) / 2, side + 4), label, font=font, fill="#123c2e")
+    return badge
+
+
+def _render_placeholder_badge(payload: str) -> Image.Image:
+    """Badge shown when the native libdmtx encoder is unavailable."""
+    side = 240
+    badge = Image.new("RGB", (side, side + 34), "#ffffff")
+    draw = ImageDraw.Draw(badge)
+    draw.rounded_rectangle([1, 1, side - 2, side + 32], radius=18,
+                           outline="#123c2e", width=4)
+    font = _load_badge_font(14)
+    for i, line in enumerate(("libdmtx unavailable —",
+                              "install libdmtx.dll",
+                              "(see README-Windows)")):
+        tw = draw.textlength(line, font=font)
+        draw.text(((side - tw) / 2, 90 + i * 20), line, font=font,
+                  fill="#a33")
+    label = "PROVEN · DM CODE"
     tw = draw.textlength(label, font=font)
     draw.text(((side - tw) / 2, side + 4), label, font=font, fill="#123c2e")
     return badge
@@ -283,7 +355,6 @@ def render_dm_badge(payload: str) -> Image.Image:
 def badge_to_data_uri(img: Image.Image) -> str:
     buf = BytesIO()
     img.save(buf, format="PNG")
-    import base64
     return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
 
 
@@ -694,5 +765,19 @@ def healthz():
 init_db()
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)),
+    # Windows console fonts (legacy cp codepages) can't render the Unicode
+    # middot in banner text; force UTF-8 output when possible.
+    if os.name == "nt":
+        try:
+            os.system("chcp 65001 >nul 2>nul")
+        except Exception:
+            pass
+
+    port = int(os.environ.get("PORT", 5000))
+    print(f"Proven (DM Code) running on http://localhost:{port}/")
+    if not DMTX_AVAILABLE:
+        print("WARNING: libdmtx native library not found — DM badges will "
+              "use a placeholder image.")
+        print("See README-Windows.md for installation instructions.")
+    app.run(host="0.0.0.0", port=port,
             debug=bool(os.environ.get("FLASK_DEBUG")))
