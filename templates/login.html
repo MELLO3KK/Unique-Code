@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Brand sign-in · Proven DM Code{% endblock %}
+{% block head %}
+<style>
+  .auth-wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+  @media (max-width: 760px) { .auth-wrap { grid-template-columns: 1fr; } }
+  .keybox { background:#fbf6ea; border:1px dashed var(--accent); border-radius:8px;
+            padding:10px 12px; font-size:13px; margin-top:14px; word-break:break-all; }
+</style>
+{% endblock %}
+{% block content %}
+<h1>For brands</h1>
+<p class="sub">Sign in to register genuine units, print DM labels and monitor
+counterfeit activity. New here? Register your brand to get an API key.</p>
+
+{% if error %}<div class="flash error">{{ error }}</div>{% endif %}
+
+<div class="auth-wrap">
+  <section class="card">
+    <h2 style="margin-top:0">Sign in</h2>
+    <form method="post" action="{{ url_for('login') }}">
+      <label>Brand name</label>
+      <input type="text" name="brand_name" required autocomplete="organization">
+      <label>API key</label>
+      <input type="password" name="api_key" required autocomplete="off">
+      <div style="margin-top:16px"><button type="submit">Sign in</button></div>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2 style="margin-top:0">Register a brand</h2>
+    <form method="post" action="{{ url_for('register_brand') }}">
+      <label>Brand name</label>
+      <input type="text" name="brand_name" required minlength="2" maxlength="60"
+             placeholder="e.g. Aurelia Naturals">
+      <div style="margin-top:16px"><button type="submit" class="btn gold">Create brand account</button></div>
+    </form>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:0">
+      On creation we generate a secret API key shown once below the form —
+      store it safely; it is used for dashboard sign-in and bulk APIs.</p>
+  </section>
+</div>
+
+{% if new_api_key %}
+<div class="keybox">🔑 API key for <b>{{ new_brand_name }}</b> (shown once):
+  <code>{{ new_api_key }}</code></div>
+{% endif %}
+{% endblock %}

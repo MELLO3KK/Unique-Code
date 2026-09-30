@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% block title %}Brand dashboard · Proven DM Code{% endblock %}
+{% block head %}
+<style>
+  .toolbar { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:18px; }
+  #issueForm .card { margin-top: 0; }
+  #codePreview img { max-width: 260px; border: 1px solid var(--line); border-radius: 10px; }
+  .secret-line { background:#fbf6ea; border:1px dashed var(--accent); border-radius:8px;
+                 padding:10px 12px; font-size:13px; margin-top:10px; word-break: break-all;}
+  .alert-banner { border-left: 5px solid var(--warn); background:#fdf6e9;
+                  padding:12px 16px; border-radius: 8px; margin-bottom: 18px; font-size:14px;}
+  .status-good { color: var(--good); font-weight:700; }
+  .status-warn { color: var(--warn); font-weight:700; }
+  .status-new  { color: var(--muted); }
+  dialog#issueDialog { border:0; border-radius:14px; padding:0; width:min(560px,92vw);
+                       box-shadow:0 18px 60px rgba(0,0,0,.28);}
+  dialog#issueDialog::backdrop { background: rgba(14,31,25,.45); }
+  .dlg-inner { padding: 22px; }
+  .outcome-unknown_serial { color: var(--bad); }
+  .outcome-bad_passcode   { color: var(--bad); }
+  .outcome-genuine_first_use { color: var(--good); }
+  .outcome-genuine_cloned { color: var(--warn); }
+</style>
+{% endblock %}
+{% block content %}
+<h1>{{ brand['name'] }} — Brand dashboard</h1>
+<p class="sub">Register genuine units, print their DM codes, and watch the
+verification ledger for counterfeit &amp; cloning signals.</p>
+
+<div class="grid-stats">
+  <div class="stat"><b>{{ stats.products }}</b><span>Registered units</span></div>
+  <div class="stat"><b>{{ stats.scans }}</b><span>Ledger scans</span></div>
+  <div class="stat"><b>{{ stats.first_uses }}</b><span>Claimed (first use)</span></div>
+  <div class="stat"><b>{{ stats.clone_alerts }}</b><span>Clone alerts</span></div>
+  <div class="stat"><b>{{ stats.fake_attempts }}</b><span>Suspicious attempts</span></div>
+</div>
+
+{% if alerts %}
+<div class="alert-banner">
+  ⚠ <b>{{ alerts|length }} unit(s) show repeat valid scans after first use</b> —
+  a strong signal of label cloning. Review their ledgers below.
+</div>
+{% endif %}
+
+<div class="toolbar">
+  <button class="btn gold" id="openIssue">＋ Register product unit</button>
+  <span style="color:var(--muted);font-size:13px">API key:
+    <code>{{ brand['api_key'][:10] }}…</code></span>
+</div>
+
+<section class="card" style="padding:0;overflow:hidden">
+  <table>
+    <thead><tr>
+      <th>Serial</th><th>Product</th><th>Batch</th><th>Status</th>
+      <th>Scans</th><th>Last scan</th><th></th>
+    </tr></thead>
+    <tbody>
+    {% for p in products %}
+      <tr>
+        <td class="mono">{{ p['serial'] }}</td>
+        <td>{{ p['product_name'] }}</td>
+        <td>{{ p['batch'] or '—' }}</td>
+        <td>
+          {% if p['claimed_unit_id'] and p['scan_count'] > 1 %}
+            <span class="pill warn">CLONE SUSPECTED</span>
+          {% elif p['claimed_unit_id'] %}
+            <span class="pill good">CLAIMED · GENUINE</span>
+          {% else %}
+            <span class="pill" style="background:#eef1ee;color:var(--muted)">UNSCANNED</span>
+          {% endif %}
+        </td>
+        <td>{{ p['scan_count'] }}</td>
+        <td class="mono" style="font-size:12px">{{ p['last_scan'] or '—' }}</td>
+        <td><a href="{{ url_for('product_ledger', serial=p['serial']) }}">Ledger →</a></td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:26px">
+        No units yet — register your first product above.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<h2 style="margin-top:30px">Recent verification activity</h2>
+<section class="card" style="padding:0;overflow:hidden">
+  <table>
+    <thead><tr><th>When (UTC)</th><th>Serial</th><th>Outcome</th><th>IP</th></tr></thead>
+    <tbody>
+    {% for r in recent %}
+      <tr>
+        <td class="mono" style="font-size:12px">{{ r['scanned_utc'] }}</td>
+        <td class="mono">{{ r['serial'] }}</td>
+        <td class="outcome-{{ r['outcome'] }}"><b>{{ r['outcome'].replace('_',' ') }}</b></td>
+        <td class="mono" style="font-size:12px">{{ r['ip'] }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="4" style="text-align:center;color:var(--muted);padding:22px">
+        No scans logged yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<dialog id="issueDialog">
+  <form method="dialog" style="margin:0">
+    <div class="dlg-inner">
+      <h2 style="margin-top:0">Register a genuine unit</h2>
+      <label>Serial (public, printed under the code)</label>
+      <input type="text" id="f_serial" placeholder="PRVN-XXXX-XXXX" autocomplete="off">
+      <label>Secret passcode (hidden scratch panel, ≥ 8 chars)</label>
+      <input type="text" id="f_passcode" placeholder="auto-generated if blank" autocomplete="off">
+      <label>Product name</label>
+      <input type="text" id="f_name" placeholder="e.g. Reserve Olive Oil 500 ml">
+      <div class="row">
+        <div><label>Batch (optional)</label><input type="text" id="f_batch"></div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:18px">
+        <button value="cancel" class="btn ghost" formnovalidate>Cancel</button>
+        <button type="submit" class="btn gold" id="issueSubmit" formmethod="dialog"
+                onclick="return false">Generate DM code</button>
+      </div>
+      <div class="err-line" id="issueErr" style="color:var(--bad)"></div>
+      <div id="codePreview" style="margin-top:14px;text-align:center"></div>
+      <div id="secretOut"></div>
+    </div>
+  </form>
+</dialog>
+
+<script>
+const dlg = document.getElementById('issueDialog');
+document.getElementById('openIssue').onclick = () => {
+  document.getElementById('issueErr').textContent='';
+  document.getElementById('codePreview').innerHTML='';
+  document.getElementById('secretOut').innerHTML='';
+  dlg.showModal();
+};
+function randKey(n=12){const A='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';let s='';
+  const b=crypto.getRandomValues(new Uint32Array(n));
+  for(let i=0;i<n;i++)s+=A[b[i]%A.length];return s;}
+document.getElementById('issueSubmit').onclick = async (e) => {
+  e.preventDefault();
+  const err = document.getElementById('issueErr');
+  err.textContent = '';
+  const body = {
+    serial: document.getElementById('f_serial').value.trim(),
+    passcode: document.getElementById('f_passcode').value.trim() || randKey(14),
+    product_name: document.getElementById('f_name').value.trim(),
+    batch: document.getElementById('f_batch').value.trim(),
+  };
+  const btn = e.currentTarget; btn.disabled = true;
+  try {
+    const r = await fetch('/api/products', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(body)});
+    const d = await r.json();
+    if (!d.ok) {
+      err.textContent = (d.messages||[d.message||'Failed']).join(' ');
+      return;
+    }
+    document.getElementById('codePreview').innerHTML =
+      `<img alt="DM code for ${d.serial}" src="data:image/png;base64,${d.png_base64}">`;
+    document.getElementById('secretOut').innerHTML =
+      `<div class="secret-line">✅ Unit registered.<br>
+       <b>Print this label before closing.</b> The secret key is shown once:<br>
+       Serial: <code>${d.serial}</code> · Key: <code>${d.passcode_shown_once}</code><br>
+       Payload encoded: <code>${d.payload.replace(/</g,'&lt;')}</code></div>`;
+    document.getElementById('f_serial').value='';
+    document.getElementById('f_passcode').value='';
+    document.getElementById('f_name').value='';
+    document.getElementById('f_batch').value='';
+  } catch(ex) {
+    err.textContent = 'Network error — please retry.';
+  } finally { btn.disabled = false; }
+};
+</script>
+{% endblock %}
