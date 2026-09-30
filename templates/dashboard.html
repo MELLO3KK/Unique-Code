@@ -12,11 +12,24 @@
       <div class="tabs" role="tablist">
         <button type="button" id="tab-signup" role="tab" aria-selected="false" onclick="showView('signup')">Sign up as a brand</button>
         <button type="button" id="tab-panel" class="active" role="tab" aria-selected="true" onclick="showView('panel')">My dashboard</button>
+        <button type="button" id="tab-track" role="tab" aria-selected="false" onclick="showView('track')">Track a code</button>
       </div>
 {% endblock %}
 
 {% block feed %}
     <div id="status"></div>
+
+    <!-- ===== TRACK A CODE (search any product code / serial / unique ID) ===== -->
+    <section id="track-form" class="card hidden" role="tabpanel" aria-labelledby="tab-track">
+      <h3 style="margin:0 0 6px">Track a code</h3>
+      <p class="hint" style="margin-top:0">Enter any product-code serial (e.g. from packaging), a brand product ID, or a unique ID to see its full tracking record — verification count, scan history and origin.</p>
+      <form onsubmit="return trackCode(event)" novalidate>
+        <label for="track-query" style="margin-top:0">Code ID / serial</label>
+        <input type="text" id="track-query" placeholder="e.g. 37N1ULVPM3RG or rL0bxredbIzNDX1M" autocomplete="off" spellcheck="false" style="text-transform:uppercase">
+        <button class="btn" type="submit" style="width:auto">🔍 Track code</button>
+      </form>
+      <div id="track-result"></div>
+    </section>
 
     <!-- ===== SIGN UP (shown when no brand session) ===== -->
     <section id="signup-form" class="card hidden" role="tabpanel" aria-labelledby="tab-signup">
@@ -189,19 +202,21 @@ function escapeHtml(s) {
 function showView(which) {
   const loggedIn = !!sessionBrand;
   if (which === 'panel' && !loggedIn) which = 'login';   // can't open the panel logged out
-  if (loggedIn && which !== 'panel') which = 'panel';    // authed users only see the panel
-  $('gate').classList.toggle('hidden', loggedIn || which === 'signup' || which === 'login');
+  if (loggedIn && which !== 'panel' && which !== 'track') which = 'panel'; // authed users default to the panel
+  $('gate').classList.toggle('hidden', loggedIn || which === 'signup' || which === 'login' || which === 'track');
   $('signup-form').classList.toggle('hidden', which !== 'signup');
   $('login-form').classList.toggle('hidden', which !== 'login');
+  $('track-form').classList.toggle('hidden', which !== 'track');
   $('panel').classList.toggle('hidden', which !== 'panel');
-  for (const t of ['signup','panel']) {
+  for (const t of ['signup','panel','track']) {
     const btn = document.getElementById('tab-' + t);
     if (!btn) continue;
-    const on = (t === 'panel') ? (which === 'panel') : (which === 'signup' || which === 'login');
+    const on = (t === 'panel') ? (which === 'panel') : (which === t) || ((t === 'signup') && which === 'login');
     btn.className = on ? 'active' : '';
     btn.setAttribute('aria-selected', on ? 'true' : 'false');
   }
   setStatus('', '');
+  if (which === 'track') setTimeout(() => $('track-query').focus(), 50);
 }
 function logout() {
   sessionBrand = null; sessionBrandPass = "";
@@ -268,6 +283,78 @@ function enterManageMode(brand) {
   loadLedger();
 }
 
+// ------------------------------------------------------------------ track any code
+async function trackCode(ev) {
+  ev.preventDefault();
+  const q = $('track-query').value.trim().toUpperCase();
+  const box = $('track-result');
+  if (!q) { box.innerHTML = '<div class="errorbox">Enter a code ID or serial to track.</div>'; return false; }
+  box.innerHTML = '<div class="hint" style="margin-top:14px"><span class="spin"></span> Looking up <b class="mono">' + escapeHtml(q) + '</b>…</div>';
+  try {
+    const data = await must('/api/dashboard/track', 'POST', {query: q});
+    box.innerHTML = renderTrack(data);
+  } catch (e) {
+    box.innerHTML = '<div class="errorbox">✖ ' + escapeHtml(e.message) + '</div>';
+  }
+  return false;
+}
+function trackStatusChip(unit) {
+  if (!unit.verified_count) return '<span class="chip gray">NOT YET VERIFIED</span>';
+  if (unit.suspect) return '<span class="chip amber">⚠ RE-VERIFIED ' + unit.verified_count + '× — possible clone/resale</span>';
+  return '<span class="chip green">✔ GENUINE — verified once</span>';
+}
+function renderTrack(d) {
+  const k = d.kind;
+  let head, facts = [], rows = '';
+  if (k === 'unit') {
+    const u = d.unit;
+    head = '<h3>Authenticity unit <span class="mono">' + escapeHtml(u.serial) + '</span></h3>' + trackStatusChip(u);
+    facts.push(['Product', u.title || '—'], ['Brand', '@' + u.brand],
+               ['Registered', fmtTime(u.created)],
+               ['Verifications', String(u.verified_count || 0)],
+               ['First verified', u.first_verified ? fmtTime(u.first_verified) : '—']);
+    if ((d.history || []).length) {
+      rows = '<table class="ledger"><tr><th>When</th><th>Result</th><th>Customer</th><th>IP</th></tr>' +
+        d.history.map(h => '<tr><td>' + new Date(h.at * 1000).toLocaleString() + '</td>'
+          + '<td><span class="chip ' + (h.result === 'AUTHENTIC' ? 'green' : h.result === 'ALREADY_USED' ? 'amber' : 'red') + '">' + escapeHtml(h.result) + '</span></td>'
+          + '<td>' + escapeHtml(h.customer || '—') + '</td><td class="mono">' + escapeHtml(h.ip || '') + '</td></tr>').join('') +
+        '</table>';
+    } else {
+      rows = '<div class="hint">No scan events recorded for this code yet.</div>';
+    }
+  } else if (k === 'product' || k === 'copy') {
+    const p = d.product;
+    head = '<h3>' + (k === 'copy' ? "Customer copy" : "Product code") + ' <span class="mono">' + escapeHtml(p.id) + '</span></h3><span class="chip blue">' + (k === 'copy' ? 'PERSONAL COPY' : 'BRAND ORIGINAL') + '</span>';
+    facts.push(['Title', p.title || p.message || '—'], ['Brand', p.brand ? '@' + p.brand : '—'],
+               ['Created', fmtTime(p.created)]);
+    if (k === 'product') facts.push(['Customer copies', String((d.copies || []).length)]);
+    if ((d.copies || []).length) {
+      rows = '<table class="ledger"><tr><th>Copy ID</th><th>Customer</th><th>Created</th></tr>' +
+        d.copies.map(c => '<tr><td class="mono">' + escapeHtml(c.id) + '</td><td>' + escapeHtml(c.customer || '—') + '</td><td>' + fmtTime(c.created) + '</td></tr>').join('') +
+        '</table>';
+    }
+  } else {
+    const c = d.code;
+    head = '<h3>Unique ID <span class="mono">' + escapeHtml(c.id) + '</span></h3><span class="chip gray">UNIQUE CODE</span>';
+    facts.push(['Message', c.message], ['Owner', c.owner || '—'],
+               ['Style', c.style || 'classic'], ['Created', fmtTime(c.created)], ['Modified', fmtTime(c.modified)]);
+  }
+  return '<div class="codebox warn" style="margin-top:16px">'
+    + head
+    + '<dl style="margin:12px 0 0;display:grid;grid-template-columns:max-content 1fr;gap:4px 14px;font-family:inherit">'
+    + facts.map(f => '<dt style="color:var(--muted);font-weight:600">' + escapeHtml(f[0]) + '</dt><dd style="margin:0;overflow-wrap:anywhere">' + escapeHtml(f[1]) + '</dd>').join('')
+    + '</dl></div>'
+    + '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">'
+    + '<button class="small" onclick="copyText(\'' + escapeHtml(($('track-query').value||'').trim().toUpperCase()) + '\',\'Code\')">⧉ Copy code</button>'
+    + '<a class="small" style="text-decoration:none" href="' + escapeHtml(d.image_url || '#') + '" download>⬇ Code PNG</a>'
+    + '</div>' + rows;
+}
+function trackThis(id) {
+  showView('track');
+  $('track-query').value = id;
+  trackCode(new Event('submit'));
+}
+
 // ------------------------------------------------------------------ products
 async function loadProducts() {
   const box = $('products-list');
@@ -283,6 +370,7 @@ async function loadProducts() {
       + '<div class="pmeta mono">ID: ' + escapeHtml(p.id) + (p.copies ? ' · ' + p.copies + ' customer copies' : '') + '</div>'
       + '<div class="actions">'
       + '<button class="small" onclick="openCode(\'' + p.id + '\')">Enlarge</button>'
+      + '<button class="small" onclick="trackThis(\'' + p.id + '\')">🔍 Track</button>'
       + '<a class="small" style="text-decoration:none" href="/p/' + p.id + '.png" download="product-' + p.id + '.png">⬇ PNG</a>'
       + '<button class="small" onclick="copyText(\'' + p.id + '\',\'Product ID\')">⧉ Copy ID</button>'
       + '</div></div>').join('');
@@ -392,6 +480,7 @@ function unitCard(u) {
     + (u.verified_count ? '<br>Verified ' + u.verified_count + '×' + (u.suspect ? ' ⚠️' : '') : '<br><i>not yet verified</i>') + '</div>'
     + '<div class="actions">'
     + '<button class="small" onclick="openUnit(\'' + u.serial + '\')">Enlarge</button>'
+    + '<button class="small" onclick="trackThis(\'' + u.serial + '\')">🔍 Track</button>'
     + '<a class="small" style="text-decoration:none" href="/a/' + u.serial + '.png" download="auth-' + u.serial + '.png">⬇ PNG</a>'
     + '<a class="small" style="text-decoration:none" href="/?serial=' + u.serial + '">Customer view</a>'
     + (u.passcode ? '<button class="small" onclick="copyText(\'' + escapeHtml(u.serial) + ':' + escapeHtml(u.passcode) + '\',\'Unit serial+passcode\')">⧉ Copy</button>' : '')
@@ -447,7 +536,7 @@ async function loadLedger() {
     for (const r of rows.slice(0, 100)) {
       const chip = r.result === 'AUTHENTIC' ? 'green' : r.result === 'ALREADY_USED' ? 'amber' : 'red';
       html += '<tr><td>' + new Date(r.at * 1000).toLocaleString() + '</td>'
-        + '<td class="mono">' + escapeHtml(r.serial) + '</td>'
+        + '<td class="mono"><a href="#" onclick="trackThis(\'' + escapeHtml(r.serial) + '\');return false;" title="Track this code">' + escapeHtml(r.serial) + '</a></td>'
         + '<td>' + escapeHtml(r.customer || '—') + '</td>'
         + '<td><span class="chip ' + chip + '">' + escapeHtml(r.result) + '</span></td>'
         + '<td class="mono">' + escapeHtml(r.ip || '') + ' · ' + escapeHtml((r.device || '').slice(0, 40)) + '</td></tr>';
@@ -473,7 +562,8 @@ async function loadBrandList() {
 // deep link: /dashboard#signup etc.
 (function(){
   const h = location.hash.replace('#','');
-  if (h === 'signup' || h === 'login') showView(h);
+  if (h === 'signup' || h === 'login' || h === 'track') showView(h);
+  else if (h.startsWith('code=')) { $('track-query').value = decodeURIComponent(h.slice(5)); showView('track'); trackCode(new Event('submit')); }
 })();
 loadBrandList();
 </script>
