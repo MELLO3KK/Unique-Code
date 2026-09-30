@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+{% block title %}Verify your product · Proven DM Code{% endblock %}
+{% block head %}
+<style>
+  .steps { display: flex; gap: 0; margin: 26px 0; }
+  .step { flex: 1; text-align: center; position: relative; color: var(--muted); font-size: 13px; font-weight: 600; }
+  .step .dot { width: 34px; height: 34px; border-radius: 50%; background: #e2e8e3;
+               display: inline-flex; align-items: center; justify-content: center;
+               color: #7d8a82; font-weight: 800; margin-bottom: 6px; transition: .2s; }
+  .step.active .dot { background: var(--brand); color: #fff; }
+  .step.done .dot { background: var(--accent); color: #2c2103; }
+  .step:not(:last-child)::after { content: ""; position: absolute; top: 17px; left: 50%;
+                                  width: 100%; height: 2px; background: #dde5de; z-index: -1; }
+  .panel { display: none; }
+  .panel.show { display: block; animation: fade .25s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(6px);} to { opacity: 1; } }
+  .scan-hint { display:flex; gap: 18px; align-items:center; background:#f0f5f1;
+               border-radius: 12px; padding: 16px; margin-bottom: 8px; }
+  .dm-demo { width: 92px; height: 92px; flex: 0 0 auto; image-rendering: pixelated; }
+  .verdict-box { border-radius: 12px; padding: 22px; color: #fff; }
+  .verdict-box.good { background: linear-gradient(135deg,#1c7c43,#155e33); }
+  .verdict-box.warn { background: linear-gradient(135deg,#b7791f,#8a5a12); }
+  .verdict-box.bad  { background: linear-gradient(135deg,#b3372f,#84231c); }
+  .verdict-box h2 { margin: 0 0 8px; font-size: 24px; }
+  .meta-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(180px,1fr));
+               gap: 10px; margin-top: 14px; font-size: 14px; }
+  .meta-grid div { background: rgba(255,255,255,.14); border-radius: 8px; padding: 8px 12px; }
+  .spinner { width: 18px; height: 18px; border: 3px solid rgba(255,255,255,.4);
+             border-top-color: #fff; border-radius: 50%; display: inline-block;
+             animation: spin .8s linear infinite; vertical-align: middle; }
+  @keyframes spin { to { transform: rotate(360deg);} }
+  .err-line { color: var(--bad); font-size: 13px; margin-top: 6px; min-height: 16px; }
+</style>
+{% endblock %}
+{% block content %}
+<h1>Is your product genuine?</h1>
+<p class="sub">Scratch off the security panel on your label, scan the Data Matrix
+code with any camera app (or enter it below), and follow the three steps.</p>
+
+<div class="steps">
+  <div class="step" id="tab1"><span class="dot">1</span><br>Scan / Serial</div>
+  <div class="step" id="tab2"><span class="dot">2</span><br>Security key</div>
+  <div class="step" id="tab3"><span class="dot">3</span><br>Verdict</div>
+</div>
+
+<!-- STEP 1 -->
+<section class="card panel" id="panel1">
+  <div class="scan-hint">
+    <canvas class="dm-demo" id="dmDemo"></canvas>
+    <div>
+      <b>Find your DM code.</b><br>
+      It looks like a QR code but is square with an L-shaped track on two
+      edges — that's the Data Matrix symbol printed on your product's seal.
+      The serial beneath it is entered automatically when you scan.
+    </div>
+  </div>
+  <label for="serial">Product serial (from under the DM code)</label>
+  <input type="text" id="serial" placeholder="e.g. PRVN-8FJ2-QD41" autocomplete="off"
+         spellcheck="false" maxlength="64">
+  <div class="err-line" id="serialErr"></div>
+  <div style="display:flex;gap:12px;margin-top:10px">
+    <button id="toStep2" class="btn gold">Continue →</button>
+  </div>
+</section>
+
+<!-- STEP 2 -->
+<section class="card panel" id="panel2">
+  <label for="passcode">Hidden security key (scratch panel, never printed in plain view)</label>
+  <input type="password" id="passcode" placeholder="e.g. 7KQ2ZP9XLM4T" autocomplete="off"
+         spellcheck="false" maxlength="64">
+  <div class="err-line" id="keyErr"></div>
+  <p style="font-size:13px;color:var(--muted)">
+    We verify this key against a salted PBKDF2-HMAC-SHA256 hash — the real
+    secret is never stored, and comparisons are timing-safe.</p>
+  <div style="display:flex;gap:12px;margin-top:6px">
+    <button id="back1" class="btn ghost">← Back</button>
+    <button id="verifyBtn" class="btn gold">Verify authenticity</button>
+  </div>
+</section>
+
+<!-- STEP 3 -->
+<section class="card panel" id="panel3">
+  <div id="verdictArea"></div>
+  <div style="margin-top:16px;display:flex;gap:12px">
+    <button id="restart" class="btn ghost">Verify another product</button>
+  </div>
+</section>
+
+<script>
+const prefill = {
+  serial: {{ (prefill_serial or "") | tojson }},
+  key: {{ (prefill_key or "") | tojson }},
+  auto: {{ 'true' if auto else 'false' }}
+};
+const panels = [document.getElementById('panel1'),
+                document.getElementById('panel2'),
+                document.getElementById('panel3')];
+const tabs = [document.getElementById('tab1'),
+              document.getElementById('tab2'),
+              document.getElementById('tab3')];
+
+function show(i) {
+  panels.forEach((p, j) => p.classList.toggle('show', j === i));
+  tabs.forEach((t, j) => {
+    t.classList.toggle('active', j === i);
+    t.classList.toggle('done', j < i);
+  });
+}
+show(0);
+
+// Draw a decorative DM-like glyph (L-track + random modules) as scan hint.
+(function drawDemo() {
+  const c = document.getElementById('dmDemo');
+  c.width = 92; c.height = 92;
+  const g = c.getContext('2d'), n = 14, s = c.width / n;
+  let seed = 42;
+  const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+  g.fillStyle = '#fff'; g.fillRect(0, 0, 92, 92);
+  g.fillStyle = '#123c2e';
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+    const onTrackL = (y === n-1 && x !== 0) || (x === 0 && y !== n-1);
+    const onTrackB = (y === n-1 && x === n-1) || (x === 0 && y === 0);
+    if (onTrackL || (!onTrackB && rnd() > .5)) g.fillRect(x*s, y*s, s, s);
+  }
+})();
+
+const serialEl = document.getElementById('serial');
+const keyEl = document.getElementById('passcode');
+if (prefill.serial) serialEl.value = prefill.serial;
+
+function validSerial(v) { return /^[A-Z0-9\-_]{6,64}$/i.test(v.trim()); }
+
+document.getElementById('toStep2').onclick = () => {
+  const v = serialEl.value.trim();
+  if (!validSerial(v)) {
+    document.getElementById('serialErr').textContent =
+      'Serial must be 6–64 letters, digits or dashes.';
+    serialEl.focus(); return;
+  }
+  document.getElementById('serialErr').textContent = '';
+  show(1); keyEl.focus();
+};
+document.getElementById('back1').onclick = () => show(0);
+document.getElementById('restart').onclick = () => {
+  keyEl.value = ''; show(0); serialEl.focus();
+};
+
+async function runVerify() {
+  const serial = serialEl.value.trim().toUpperCase();
+  const passcode = keyEl.value.trim();
+  const btn = document.getElementById('verifyBtn');
+  if (passcode.length < 4) {
+    document.getElementById('keyErr').textContent = 'Enter the security key from the scratch panel.';
+    return;
+  }
+  document.getElementById('keyErr').textContent = '';
+  show(2);
+  document.getElementById('verdictArea').innerHTML =
+    '<div class="verdict-box good" style="background:#41564c"><span class="spinner"></span>&nbsp; Consulting the Proven ledger…</div>';
+  btn.disabled = true;
+  try {
+    const r = await fetch('/api/verify', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({serial, passcode})
+    });
+    renderVerdict(await r.json(), r.status);
+  } catch (e) {
+    document.getElementById('verdictArea').innerHTML =
+      '<div class="verdict-box bad"><h2>Network error</h2>' +
+      '<p>We could not reach the Proven service. Please retry.</p></div>';
+  } finally { btn.disabled = false; }
+}
+document.getElementById('verifyBtn').onclick = runVerify;
+
+function esc(s){const d=document.createElement('div');d.textContent=s??'';return d.innerHTML;}
+
+function renderVerdict(data, status) {
+  const area = document.getElementById('verdictArea');
+  if (!data.ok) {
+    area.innerHTML = `<div class="verdict-box bad"><h2>${esc(data.error==='rate_limited'?'Slow down':'Cannot verify')}</h2>
+      <p>${esc(data.message||'Try again shortly.')}</p></div>`;
+    return;
+  }
+  let meta = '';
+  if (data.product_name) {
+    meta = `<div class="meta-grid">
+      <div><b>Product</b><br>${esc(data.product_name)}</div>
+      <div><b>Brand</b><br>${esc(data.brand)}</div>
+      ${data.batch ? `<div><b>Batch</b><br>${esc(data.batch)}</div>` : ''}
+      <div><b>Serial</b><br><span class="mono">${esc(data.serial || serialEl.value.trim().toUpperCase())}</span></div>
+      <div><b>Verified scans</b><br>${esc(data.scan_count ?? '')}</div>
+      <div><b>Issued</b><br>${esc((data.issued_utc||'').slice(0,10))}</div>
+    </div>`;
+  }
+  area.innerHTML = `<div class="verdict-box ${esc(data.tone)}">
+      <h2>${esc(data.verdict)}</h2>
+      <p><b>${esc(data.title)}.</b> ${esc(data.message)}</p>
+      ${meta}
+    </div>`;
+}
+
+if (prefill.auto && prefill.serial && prefill.key) {
+  serialEl.value = prefill.serial; keyEl.value = prefill.key;
+  show(1); runVerify();
+} else if (prefill.serial) {
+  show(1); keyEl.focus();
+}
+</script>
+{% endblock %}

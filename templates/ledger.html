@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Ledger · {{ product['serial'] }} · Proven{% endblock %}
+{% block head %}
+<style>
+  .ledger { border-left: 4px solid var(--brand); margin-left: 8px; padding-left: 20px; }
+  .entry { position: relative; padding: 10px 0; }
+  .entry::before { content: ""; width: 13px; height: 13px; border-radius: 50%;
+                   background: var(--accent); border: 3px solid #fff;
+                   box-shadow: 0 0 0 2px var(--brand); position: absolute; left: -28px; top: 14px; }
+  .entry .when { font-size: 12px; color: var(--muted); }
+  .hashline { font-size: 11px; color: var(--muted); word-break: break-all; }
+</style>
+{% endblock %}
+{% block content %}
+<h1>Append-only ledger</h1>
+<p class="sub">Every successful verification of serial
+  <code>{{ product['serial'] }}</code> — immutable history, newest at the
+  bottom. Entries can only be appended, never edited or removed.</p>
+
+<section class="card" style="margin-bottom:20px">
+  <div class="row">
+    <div><label>Product</label>{{ product['product_name'] }}</div>
+    <div><label>Batch</label>{{ product['batch'] or '—' }}</div>
+    <div><label>Issued</label>{{ product['issued_utc'] }}</div>
+    <div><label>Status</label>
+      {% if product['claimed_unit_id'] and entries|length > 1 %}
+        <span class="pill warn">CLONE SUSPECTED</span>
+      {% elif product['claimed_unit_id'] %}
+        <span class="pill good">CLAIMED · GENUINE</span>
+      {% else %}
+        <span class="pill" style="background:#eef1ee;color:var(--muted)">UNSCANNED</span>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+<section class="card">
+  {% if entries %}
+  <div class="ledger">
+    {% for e in entries %}
+    <div class="entry">
+      <b>Scan #{{ loop.index }}</b>
+      {% if e['id'] == product['claimed_unit_id'] %}<span class="pill good">FIRST USE — owner claim</span>{% endif %}
+      <div class="when">{{ e['scanned_utc'] }} · IP {{ e['ip'] or 'n/a' }}</div>
+      <div class="hashline mono">unit_id={{ e['id'] }} · product={{ product['serial'] }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p style="color:var(--muted)">No customer has verified this unit yet.</p>
+  {% endif %}
+</section>
+
+<div style="margin-top:18px"><a class="btn ghost" href="{{ url_for('dashboard') }}">← Back to dashboard</a></div>
+{% endblock %}
