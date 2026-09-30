@@ -297,39 +297,56 @@ def _rs_encode(data: bytes, cw_count: int) -> list[int]:
     return result[len(data):]
 
 
-# Symbol geometry per ISO/IEC 16022 Table 1 (square symbols):
-#   name -> (total codewords, ecc codewords, mapping rows, mapping cols)
-_DM_SIZES: dict[str, tuple[int, int, int, int]] = {
-    "10x10":   (3,    3,   8,   8),
-    "12x12":   (5,    5,   10,  10),
-    "14x14":   (8,    6,   12,  12),
-    "16x16":   (12,   8,   14,  14),
-    "18x18":   (18,   10,  16,  16),
-    "20x20":   (22,   16,  18,  18),
-    "22x22":   (30,   18,  20,  20),
-    "24x24":   (36,   22,  22,  22),
-    "26x26":   (44,   26,  24,  24),
-    "32x32":   (62,   36,  14,  14),
-    "36x36":   (84,   42,  16,  16),
-    "40x40":   (106,  48,  18,  18),
-    "42x42":   (114,  56,  20,  20),
-    "44x44":   (128,   68,  22,  22),
-    "46x46":   (154,   76,  24,  24),
-    "48x48":   (174,   84,  14,  14),
-    "50x50":   (206,   98,  16,  16),
-    "52x52":   (222,  106,  18,  18),
-    "64x64":   (320,  140,  20,  20),
-    "72x72":   (442,  154,  22,  22),
-    "80x80":   (600,  176,  24,  24),
-    "88x88":   (724,  206,  14,  14),
-    "96x96":   (890,  222,  16,  16),
-    "104x104": (980,  252,  18,  18),
-    "120x120": (1408, 320,  20,  20),
-    "132x132": (1660, 372,  22,  22),
-    "144x144": (1940, 420,  24,  24),
+# Symbol geometry per ISO/IEC 16022 Table 1 (ECC200 square symbols).
+# Each row: symbol size name, total codewords (data + ECC), number of
+# ECC codewords, the *per-block* mapping dimensions, and the block grid.
+# Symbols larger than 26x26 are split into 2x2 / 4x4 / 6x6 blocks, so
+# the mapping matrix is smaller than the symbol itself — the block
+# count below must match the standard exactly, otherwise capacity is
+# silently wrong (that is what produced the old "mapping too small"
+# AssertionError for payloads past ~37 characters).
+#   name -> (total cw, ecc cw, block rows, block cols, nr, nc)
+_DM_SIZES: dict[str, tuple[int, int, int, int, int, int]] = {
+    "10x10":   (3,    5,    8,   8,  1, 1),
+    "12x12":   (5,    7,   10,  10,  1, 1),
+    "14x14":   (8,    10,  12,  12,  1, 1),
+    "16x16":   (12,   12,  14,  14,  1, 1),
+    "18x18":   (18,   14,  16,  16,  1, 1),
+    "20x20":   (22,   18,  18,  18,  1, 1),
+    "22x22":   (30,   20,  20,  20,  1, 1),
+    "24x24":   (36,   24,  22,  22,  1, 1),
+    "26x26":   (44,   28,  24,  24,  1, 1),
+    "32x32":   (62,   36,  14,  14,  2, 2),
+    "36x36":   (84,   42,  16,  16,  2, 2),
+    "40x40":   (106,  48,  18,  18,  2, 2),
+    "44x44":   (122,  56,  20,  20,  2, 2),
+    "48x48":   (152,  68,  22,  22,  2, 2),
+    "52x52":   (180,  76,  14,  14,  4, 4),
+    "64x64":   (213,  88,  14,  14,  4, 4),
+    "72x72":   (261,  100, 16,  16,  4, 4),
+    "80x80":   (322,  120, 18,  18,  4, 4),
+    "88x88":   (376,  132, 20,  20,  4, 4),
+    "96x96":   (436,  144, 22,  22,  4, 4),
+    "104x104": (512,  172, 24,  24,  4, 4),
+    "120x120": (620,  192, 14,  14,  6, 6),
+    "132x132": (744,  224, 16,  16,  6, 6),
+    "144x144": (896,  256, 18,  18,  6, 6),
+    "160x160": (1240, 304, 20,  20,  6, 6),
+    "176x176": (1476, 352, 22,  22,  6, 6),
+    "192x192": (1812, 384, 24,  24,  6, 6),
 }
 
-_DM_ORDER = sorted(_DM_SIZES, key=lambda n: _DM_SIZES[n][0])
+# Data-region geometry derived from the table above:
+#   name -> (total cw, ecc cw, mapping rows, mapping cols,
+#            data cw, num blocks)
+_DM_GEOM: dict[str, tuple[int, int, int, int, int, int]] = {}
+for _n, (_tot, _ecc, _br, _bc, _nr, _nc) in _DM_SIZES.items():
+    _mr, _mc = _br * _nr, _bc * _nc
+    _blocks = _nr * _nc
+    assert _mr * _mc >= _tot * 8, f"{_n}: mapping too small for {_tot} cw"
+    _DM_GEOM[_n] = (_tot, _ecc, _mr, _mc, _tot - _ecc, _blocks)
+
+_DM_ORDER = sorted(_DM_GEOM, key=lambda n: _DM_GEOM[n][0])
 
 
 def _dm_ascii_codewords(text: str) -> list[int]:
@@ -491,31 +508,83 @@ def _dm_module_positions(rows: int, cols: int) -> list[tuple[int, int]]:
     return order
 
 
+def _dm_pad_word(n: int) -> int:
+    """Standard pad codeword for position ``n`` (0-based) — §5.2.4."""
+    if n == 0:
+        return 129
+    return ((129 + ((((n + 1) * 254) % 253) + 1)) % 254) + 1
+
+
+def _interleave(data: bytes, ncw: int, ecc_count: int,
+                num_blocks: int) -> list[int]:
+    """Build the final codeword sequence for multi-block symbols.
+
+    ISO/IEC 16022 §5.9: the data is split into ``num_blocks`` blocks;
+    each block holds ``k_hi = ncw // num_blocks`` data codewords, and if
+    there is a remainder ``r = ncw % num_blocks`` then *block r* (0-based
+    — not the last one!) holds one fewer word (e.g. 64x64: 125 cw per
+    block, 88 ECC in 16 blocks of 22 ECC words, so block 7 carries only
+    36 data words).  The encoder interleaves by codeword index across
+    blocks: d[0][0], d[1][0], …, skipping short positions; likewise for
+    the ECC codewords.
+
+    ``data`` may be shorter than the block size allows when an EDIFACT /
+    C40 / base-256 segment was terminated with an unpad "latch" codeword
+    (§5.4.4); those trailing slots are filled with pad codewords first.
+    """
+    n = len(data)
+    k_hi = ncw // num_blocks            # data cw in most blocks
+    r = ncw % num_blocks                # short block index (or none)
+    if k_hi == 0:
+        raise ValueError("invalid block split")
+    if n < ncw:                         # complete to capacity with pads
+        data = data + bytes(_dm_pad_word(i) for i in range(n, ncw))
+        n = ncw
+
+    blocks_data: list[list[int]] = []
+    pos = 0
+    for b in range(num_blocks):
+        size = k_hi - (1 if b == r else 0)
+        blocks_data.append(list(data[pos:pos + size]))
+        pos += size
+    assert pos == n
+
+    ecc_per_block = [ecc_count // num_blocks] * num_blocks
+    for b in range(ecc_count % num_blocks):
+        ecc_per_block[b] += 1
+    blocks_ecc = [_rs_encode(bytes(blk), e)
+                  for blk, e in zip(blocks_data, ecc_per_block)]
+
+    out: list[int] = []
+    for i in range(k_hi):               # longest data block length
+        for b in range(num_blocks):
+            if i < len(blocks_data[b]):
+                out.append(blocks_data[b][i])
+    max_e = max(ecc_per_block)
+    for i in range(max_e):
+        for b in range(num_blocks):
+            if i < len(blocks_ecc[b]):
+                out.append(blocks_ecc[b][i])
+    return out
+
+
 def encode_datamatrix(text: str) -> Image.Image:
     """Encode ASCII text into a 1-bit Data Matrix ECC200 symbol image."""
     words = _dm_ascii_codewords(text)
     chosen = None
     for name in _DM_ORDER:
-        total, ecc, _mr, _mc = _DM_SIZES[name]
-        if len(words) <= total - ecc:
+        if len(words) <= _DM_GEOM[name][4]:      # data codeword capacity
             chosen = name
             break
     if chosen is None:
         raise ValueError("payload too large for supported DM sizes")
-    total, ecc, mrows, mcols = _DM_SIZES[chosen]
-    assert mrows * mcols >= total * 8, f"{chosen} mapping too small"
+    total, ecc, mrows, mcols, ncw, nb = _DM_GEOM[chosen]
 
     # Pad with the standard pseudo-random sequence (254 / 129 style).
-    while len(words) < total - ecc:
-        n = len(words)
-        if n == 0:
-            pad = 129
-        else:
-            pad = ((129 + ((((n + 1) * 254) % 253) + 1)) % 254) + 1
-        words.append(pad)
-    data_bytes = bytes(words[:total - ecc])
-    ecc_words = _rs_encode(data_bytes, ecc)
-    codewords = list(data_bytes) + ecc_words
+    while len(words) < ncw:
+        words.append(_dm_pad_word(len(words)))
+    data_bytes = bytes(words[:ncw])
+    codewords = _interleave(data_bytes, ncw, ecc, nb)
     assert len(codewords) == total
 
     bits = iter([((w >> b) & 1) != 0 for w in codewords for b in
@@ -532,17 +601,11 @@ def encode_datamatrix(text: str) -> Image.Image:
             if (r, c) not in filled:
                 grid[r][c] = _dm_random_bit(r, c, mrows, mcols)
 
-    # Assemble the full symbol: L-pattern clock + data blocks.
-    # (Square symbols ≤ 24 modules use a single block; larger ones split
-    # into 2x2 / 4x4 / 6x6 blocks with interior clock rows/columns.)
-    if mrows <= 24:
-        nrb = ncb = 1
-    elif mrows <= 48:
-        nrb = ncb = 2
-    elif mrows <= 96:
-        nrb = ncb = 4
-    else:
-        nrb = ncb = 6
+    # Block layout comes from the size table itself (ISO/IEC 16022
+    # Table 1): 1x1 up to 26x26, then 2x2, 4x4, 6x6 and 8x8 blocks.
+    nrb = int(nb ** 0.5)
+    ncb = nrb
+    assert nrb * ncb == nb, f"{chosen}: non-square block layout"
     height = nrb * mrows + 2 * nrb
     width = ncb * mcols + 2 * ncb
     symbol = [[False] * width for _ in range(height)]
