@@ -1,2 +1,6 @@
+# Python bytecode
 __pycache__/
 *.pyc
+
+# Database files
+proven.db
