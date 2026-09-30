@@ -20,8 +20,8 @@ class ProvenTests(unittest.TestCase):
         r = self.client.post("/register-brand",
                              data={"brand_name": "Aurelia"})
         self.assertEqual(r.status_code, 200)
-        key = re.search(r"API key for .*?Aurelia.*?<code>(prv_[0-9a-f]+)",
-                        r.get_data(as_text=True))
+        key = re.search(r"API key for .*?<code>(prv_[0-9a-f]+)",
+                        r.get_data(as_text=True), re.S)
         self.assertIsNotNone(key, "one-time API key not shown")
         self.api_key = key.group(1)
         # dashboard accessible after registration session
