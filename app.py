@@ -46,6 +46,35 @@ except Exception:  # libdmtx shared library missing (common on Windows)
     dmtx_encode = None
     DMTX_AVAILABLE = False
 
+
+def _ensure_libdmtx() -> bool:
+    """Make sure the native libdmtx shared library can be loaded.
+
+    ``pylibdmtx`` is only a ctypes wrapper — pip does not install the
+    native library with it.  On Linux that is ``apt-get install
+    libdmtx0b``; on Windows you must supply ``libdmtx-64.dll`` yourself
+    (see README.md).  Python 3.8+ no longer searches the script
+    directory for DLLs, so register this folder first and then retry the
+    import.  Returns ``True`` when DM encoding is available.
+    """
+    global dmtx_encode, DMTX_AVAILABLE
+    if DMTX_AVAILABLE:
+        return True
+    try:
+        if os.name == "nt":
+            # A copy of libdmtx-64.dll next to app.py is found this way.
+            try:
+                os.add_dll_directory(BASE_DIR)
+            except (OSError, ValueError):
+                pass
+        from pylibdmtx.pylibdmtx import encode as dmtx_encode  # noqa: F811
+        DMTX_AVAILABLE = True
+    except Exception:
+        dmtx_encode = None
+        DMTX_AVAILABLE = False
+    return DMTX_AVAILABLE
+
+
 # --------------------------------------------------------------------------
 # Configuration
 # --------------------------------------------------------------------------
@@ -53,19 +82,7 @@ except Exception:  # libdmtx shared library missing (common on Windows)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.environ.get("PROVEN_DB", os.path.join(BASE_DIR, "proven.db"))
 
-# pylibdmtx is a wrapper around the native libdmtx shared library.  On
-# Windows the DLL (e.g. libdmtx-64.dll) must be on PATH or sitting next
-# to app.py; register this directory so a local copy is found first
-# (Python 3.8+ changed native DLL loading semantics), then retry the
-# import if it failed above.
-if os.name == "nt" and not DMTX_AVAILABLE:
-    try:
-        os.add_dll_directory(BASE_DIR)
-        from pylibdmtx.pylibdmtx import encode as dmtx_encode
-        DMTX_AVAILABLE = True
-    except Exception:
-        dmtx_encode = None
-        DMTX_AVAILABLE = False
+_ensure_libdmtx()
 
 PBKDF2_ITERATIONS = 200_000
 RATE_LIMIT_WINDOW = 60.0          # seconds
@@ -288,9 +305,12 @@ def render_dm_badge(payload: str) -> Image.Image:
 
     Falls back to a placeholder badge when the native libdmtx shared
     library is unavailable (e.g. ``pylibdmtx`` installed via pip on
-    Windows without libdmtx.dll on PATH — see README-Windows notes).
+    Windows without libdmtx-64.dll on PATH — see README.md).
+    The availability check is retried lazily here so that installing
+    the library while the app runs (or fixing the DLL search path)
+    takes effect without a restart.
     """
-    if not DMTX_AVAILABLE:
+    if not _ensure_libdmtx():
         return _render_placeholder_badge(payload)
 
     # Pick the smallest square DM size that fits the payload, then upscale.
@@ -342,7 +362,7 @@ def _render_placeholder_badge(payload: str) -> Image.Image:
     font = _load_badge_font(14)
     for i, line in enumerate(("libdmtx unavailable —",
                               "install libdmtx.dll",
-                              "(see README-Windows)")):
+                              "(see README)")):
         tw = draw.textlength(line, font=font)
         draw.text(((side - tw) / 2, 90 + i * 20), line, font=font,
                   fill="#a33")
@@ -500,18 +520,24 @@ def require_brand():
 # --------------------------------------------------------------------------
 
 
-@app.route("/")
-def index():
-    return render_template("verify.html")
-
-
-@app.route("/verify", methods=["GET"])
-def verify_page():
-    """Deep link target of the DM code: prefills the stepper."""
+def _render_verify_page():
+    """Render the customer-facing scan/verification stepper."""
     serial = (request.args.get("serial") or "").strip().upper()
     key = (request.args.get("key") or "").strip()
     return render_template("verify.html", prefill_serial=serial,
                            prefill_key=key, auto=bool(serial and key))
+
+
+@app.route("/")
+def index():
+    """Home page is the scan/verify page — never the brand login page."""
+    return _render_verify_page()
+
+
+@app.route("/verify", methods=["GET"])
+def verify_page():
+    """Deep link target of the DM code: prefills and auto-runs the stepper."""
+    return _render_verify_page()
 
 
 @app.route("/api/verify", methods=["POST"])
@@ -778,6 +804,6 @@ if __name__ == "__main__":
     if not DMTX_AVAILABLE:
         print("WARNING: libdmtx native library not found — DM badges will "
               "use a placeholder image.")
-        print("See README-Windows.md for installation instructions.")
+        print("See README.md for installation instructions.")
     app.run(host="0.0.0.0", port=port,
             debug=bool(os.environ.get("FLASK_DEBUG")))
