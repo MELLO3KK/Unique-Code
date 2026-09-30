@@ -73,6 +73,17 @@ a:hover { text-decoration: underline; text-underline-offset: 2px; }
 .logo svg { width: 28px; height: 28px; fill: var(--accent);
   filter: drop-shadow(0 0 10px rgba(79,140,255,.55)); }
 .topbar .spacer { flex: 1; }
+/* role indicator: which of the two pages you are on */
+.role-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 13px; border-radius: 9999px;
+  font-size: .78rem; font-weight: 800; letter-spacing: .02em;
+  border: 1px solid var(--border-strong); color: var(--muted);
+  background: var(--bg-elev); white-space: nowrap; user-select: none;
+}
+.role-chip.customer { color: var(--green); border-color: #22c98a55; background: #22c98a14; }
+.role-chip.business { color: var(--accent); border-color: #4f8cff55; background: #4f8cff14; }
+@media (max-width: 560px) { .role-chip { display: none; } }
 .searchbox {
   flex: 1; max-width: 460px;
   background: var(--bg-elev); border: 1px solid var(--border); border-radius: 9999px;
