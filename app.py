@@ -32,21 +32,17 @@ app = Flask(__name__)
 app.secret_key = codes.load_secret_key()
 
 
+# --------------------------------------------------------------------------
+# THE WHOLE SITE IS EXACTLY TWO PAGES:
+#   /          -> customer page: scan the product code & verify it
+#   /dashboard -> business page: manage the brand, codes, units & records
+# Everything else is an API endpoint or a generated image.
+# --------------------------------------------------------------------------
 @app.route("/")
 def index():
-    """The customer-facing home: scan a brand's product code as proof of purchase."""
+    """The ONLY customer-facing page: scan a product code to prove authenticity."""
     return render_template(
         "home.html",
-        styles=dmcode.STYLES,
-        max_bytes=dmcode.MAX_TEXT_BYTES,
-    )
-
-
-@app.route("/create")
-def create_page():
-    """Legacy free-code creator (kept so old links keep working)."""
-    return render_template(
-        "index.html",
         styles=dmcode.STYLES,
         max_bytes=dmcode.MAX_TEXT_BYTES,
     )
@@ -59,14 +55,36 @@ def style_css():
     return Response(open(css_path, encoding="utf-8").read(), mimetype="text/css")
 
 
-@app.route("/brands")
-def brands_home():
-    """The social feed: every business brand account and its product codes."""
+@app.route("/dashboard")
+def dashboard():
+    """The ONLY business-facing page: brand dashboard (codes, units, ledger)."""
     return render_template(
-        "brands.html",
+        "dashboard.html",
         styles=dmcode.STYLES,
         max_bytes=dmcode.MAX_TEXT_BYTES,
     )
+
+
+_OLD_PAGES = {"/brands": "/dashboard", "/create": "/dashboard",
+              "/verify": "/", "/scan": "/"}
+
+
+@app.route("/brands")
+@app.route("/create")
+@app.route("/verify")
+@app.route("/verify/<serial>")
+@app.route("/scan")
+def _removed_page(serial=""):
+    """Old extra pages were removed — only / (customer) and /dashboard exist."""
+    if request.method == "POST" and request.path == "/scan":
+        # legacy image-decode uploads keep working from the customer page
+        return api_decode()
+    target = _OLD_PAGES.get(request.path, "/")
+    if request.path == "/verify" and (serial or request.args.get("serial")):
+        # a scanned product code must still land on the customer page
+        s = quote((serial or request.args.get("serial", "")).strip().upper())
+        return redirect(f"/?serial={s}", 302)
+    return redirect(target, 301)
 
 
 # --------------------------------------------------------------------------
@@ -331,15 +349,8 @@ def product_image(pid):
 
 # --------------------------------------------------------------------------
 # Product authenticity: register genuine units -> verify by scan + passcode
+# (the customer verifies on the single home page "/" — no separate page)
 # --------------------------------------------------------------------------
-@app.get("/verify")
-@app.get("/verify/<serial>")
-def verify_page(serial=""):
-    """The customer-facing page a scanned product code opens."""
-    prefill = (serial or request.args.get("serial", "")).strip().upper()
-    return render_template("verify.html", prefill=prefill)
-
-
 @app.post("/api/verify")
 def api_verify():
     """Verify a product: serial (from the scanned code) + printed passcode.
@@ -547,9 +558,12 @@ def image():
     return Response(dmcode.to_png_bytes(img), mimetype="image/png")
 
 
-@app.route("/scan", methods=["POST"])
-def scan():
-    """Upload endpoint: decode an uploaded DM-code image back to its text."""
+@app.route("/api/decode", methods=["POST"])
+def api_decode():
+    """API endpoint: decode an uploaded DM-code image back to its text.
+
+    (Used by the single customer page "/" — there is no separate scan page.)
+    """
     file = request.files.get("file")
     if file is None:
         return jsonify(error="No file uploaded"), 400

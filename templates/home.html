@@ -2,10 +2,66 @@
 {% set active = 'scan' %}
 {% set cta_label = 'Scan a product code' %}
 
+{% block title %}Proven — scan it. Prove it.{% endblock %}
+
+{% block head %}
+<style>
+  /* page-specific: stepper + verdict banner (the whole customer flow lives on this one page) */
+  .steps { display:flex; gap:0; margin: 4px 16px 14px; }
+  .step { flex:1; text-align:center; font-size:.78rem; font-weight:700; color:var(--muted); position:relative; padding-top:26px; }
+  .step::before { content:""; position:absolute; top:6px; left:50%; transform:translateX(-50%);
+    width:16px; height:16px; border-radius:50%; background:var(--bg-elev); border:2px solid var(--border-strong); }
+  .step::after  { content:""; position:absolute; top:13px; left:calc(50% + 12px); right:calc(-50% + 12px); height:2px; background:var(--border); }
+  .step:last-child::after { display:none; }
+  .step.done { color:var(--green); }
+  .step.done::before { background:var(--green); border-color:var(--green); box-shadow:0 0 10px rgba(34,201,138,.6); }
+  .step.now  { color:var(--accent); }
+  .step.now::before { background:var(--accent); border-color:var(--accent); box-shadow:0 0 10px rgba(79,140,255,.6); }
+
+  #result { display:none; margin:14px; border-radius:20px; padding:28px 22px; text-align:center;
+    border:1px solid var(--border); background:var(--panel); box-shadow:var(--shadow-md); }
+  #result.show { display:block; animation:pop .35s var(--ease); }
+  #result .halo { width:88px; height:88px; margin:0 auto 12px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-size:2.6rem;
+    background:var(--bg-elev); border:2px solid var(--border-strong); }
+  #result h2 { margin:6px 0 8px; font-size:1.5rem; letter-spacing:-.02em; }
+  #result p { margin:0 auto; max-width:440px; color:var(--muted); font-size:.95rem; line-height:1.6; }
+  #result .meta { margin-top:14px; font-size:.8rem; color:var(--muted); }
+  #result.ok   { border-color:var(--green); background:linear-gradient(180deg,#22c98a1f,var(--panel)); }
+  #result.ok .halo { border-color:var(--green); box-shadow:0 0 34px rgba(34,201,138,.45); }
+  #result.ok h2 { color:var(--green); }
+  #result.bad  { border-color:var(--red); background:linear-gradient(180deg,#ff5d7a1f,var(--panel)); }
+  #result.bad .halo { border-color:var(--red); box-shadow:0 0 34px rgba(255,93,122,.45); }
+  #result.bad h2 { color:var(--red); }
+  #result.warn { border-color:var(--amber); background:linear-gradient(180deg,#ffc83d1a,var(--panel)); }
+  #result.warn .halo { border-color:var(--amber); box-shadow:0 0 34px rgba(255,200,61,.4); }
+  #result.warn h2 { color:var(--amber); }
+  #result.pending .halo { border-color:var(--accent); box-shadow:0 0 34px rgba(79,140,255,.4); }
+  #result.pending h2 { color:var(--accent); }
+  .brandline { display:flex; align-items:center; gap:10px; justify-content:center; margin-top:12px; }
+</style>
+{% endblock %}
+
 {% block page_title %}Scan &amp; Verify{% endblock %}
-{% block page_sub %}Only registered business brands can create product codes. You scan the code on the product and submit it as proof that you bought a genuine item — every record is saved.{% endblock %}
+{% block page_sub %}This is the <strong>only customer page</strong>: scan the Data Matrix code on your product and enter the passcode printed inside the packaging to prove you bought a genuine item. Every record is saved permanently.{% endblock %}
 
 {% block feed %}
+    <!-- progress stepper -->
+    <div class="steps" aria-hidden="true">
+      <div class="step now" id="step-scan">Code scanned</div>
+      <div class="step" id="step-pass">Passcode entered</div>
+      <div class="step" id="step-verdict">Verdict</div>
+    </div>
+
+    <!-- verdict banner -->
+    <div id="result" role="alert">
+      <div class="halo" id="r-icon"></div>
+      <h2 id="r-title"></h2>
+      <div class="brandline" id="r-brand"></div>
+      <p id="r-msg"></p>
+      <div class="meta mono" id="r-meta"></div>
+    </div>
+
     <!-- composer: customer scans here -->
     <div class="card" id="scanner-card">
       <div style="display:flex; gap:12px;">
@@ -38,6 +94,16 @@
         </div>
       </div>
     </div>
+
+    <section class="card">
+      <h3 style="margin:0 0 6px">How this works</h3>
+      <ol class="hint" style="margin:0; padding-left:18px; line-height:1.9">
+        <li>The brand registers each product unit on its <a href="/dashboard">business dashboard</a> — one unique serial + one secret passcode per item.</li>
+        <li>The serial is encoded in the scannable code image on the product; the passcode ships privately with it.</li>
+        <li>You scan the code here and enter the passcode.</li>
+        <li><b style="color:var(--green)">AUTHENTIC</b>: serial + passcode match. <b style="color:var(--red)">FAKE</b>: they don't. Already verified elsewhere? You'll get a clone/resale warning.</li>
+      </ol>
+    </section>
 
     <div class="section-title">Live purchase proofs</div>
     <div id="ticker"><div class="skeleton" style="margin:12px 14px;"></div><div class="skeleton" style="margin:12px 14px;"></div></div>
@@ -95,9 +161,9 @@ async function handleImage(file){
     }catch(err){ /* fall through to server decode */ }
   }
   if(!text){
-    // server-side decode via /scan (zxing-cpp)
+    // server-side decode via /api/decode (zxing-cpp)
     const fd = new FormData(); fd.append('file', file, 'scan.png');
-    const resp = await fetch('/scan',{method:'POST', body:fd});
+    const resp = await fetch('/api/decode',{method:'POST', body:fd});
     const data = await resp.json().catch(()=>({}));
     if(resp.ok && data.text) text = data.text;
     else {
@@ -115,9 +181,15 @@ async function handleImage(file){
   showProof(scannedSerial);
 }
 
+function setStep(which){ // which: 2 = passcode stage, 3 = verdict
+  const s = [document.getElementById('step-scan'), document.getElementById('step-pass'), document.getElementById('step-verdict')];
+  s.forEach((el,i)=>{ el.className = 'step ' + ((i+1) < which ? 'done' : (i+1) === which ? 'now' : ''); });
+}
+
 function showProof(serial){
   if(serial) scannedSerial = serial.toUpperCase();
   $('proof').classList.remove('hidden');
+  setStep(2);
   $('passcode').focus();
   // public pre-info about the unit
   if(serial){
@@ -130,6 +202,18 @@ function showProof(serial){
   }
 }
 
+function banner(cls, icon, title, msg, brand, meta){
+  const el = $('result');
+  el.className = 'show '+cls;
+  $('r-icon').textContent = icon;
+  $('r-title').textContent = title;
+  $('r-msg').textContent = msg;
+  $('r-brand').innerHTML = brand || '';
+  $('r-meta').innerHTML = meta || '';
+  setStep(cls==='pending' ? 2 : 3);
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
 async function submitProof(){
   const serial = scannedSerial || $('serial').value.trim().toUpperCase();
   const passcode = $('passcode').value.trim().toUpperCase();
@@ -138,30 +222,44 @@ async function submitProof(){
   if(!passcode){ $('scan-result').innerHTML='<div class="errorbox">Enter the passcode printed with the product.</div>'; $('passcode').focus(); return; }
   const btn = $('verify-btn');
   btn.disabled = true; btn.textContent = '⏳ Checking…';
+  banner('pending','⏳','Checking…','Contacting the verification server.');
   const r = await api('/api/verify','POST',{serial, passcode, customer});
   btn.disabled = false; btn.textContent = '✅ Submit proof of purchase';
   const d = r.data;
-  let box;
+  const brandHtml = d.unit ? ('<div class="avatar sm">'+esc(d.unit.brand[0])+'</div><b>@'+esc(d.unit.brand)+'</b> · '+esc(d.unit.title||'product')) : '';
+  const metaHtml = d.unit ? ('Serial '+esc(d.unit.serial)+' · verifications of this exact code: '+((d.unit.verified_count ?? '—'))) : '';
+  let box = '';
   if(d.result==='AUTHENTIC'){
-    box = '<div class="okbox"><b>✅ PROOF ACCEPTED — genuine product.</b><br>'+esc(d.message)+
-          (d.unit?'<br>Saved to @'+esc(d.unit.brand)+"'s purchase records.":'')+'</div>';
+    banner('ok','✅','PROOF ACCEPTED — GENUINE PRODUCT', d.message, brandHtml, metaHtml);
     toast('Proof accepted — genuine product 🎉','ok');
   } else if(d.result==='ALREADY_USED'){
-    box = '<div class="errorbox" style="border-color:#ffc83d55;background:#ffc83d14;color:#ffe970"><b>⚠️ Genuine code, but already proven before.</b><br>'+esc(d.message)+'</div>';
+    banner('warn','⚠️','GENUINE CODE, BUT ALREADY PROVEN BEFORE', d.message, brandHtml, metaHtml);
     toast('Genuine code, but re-scanned before','info');
   } else if(d.result==='FAKE'){
-    box = '<div class="errorbox"><b>❌ NOT AUTHENTIC.</b><br>'+esc(d.message)+'</div>';
+    banner('bad','❌','NOT AUTHENTIC', d.message, brandHtml, '');
     toast('This product could not be authenticated','err');
   } else if(d.result==='NOT_FOUND'){
-    box = '<div class="errorbox"><b>❌ CODE NOT RECOGNISED.</b><br>'+esc(d.message)+'</div>';
+    banner('bad','❌','CODE NOT RECOGNISED', d.message, '', '');
     toast('Code not recognised','err');
   } else {
-    box = '<div class="errorbox"><b>❌ Verification failed.</b><br>'+esc(d.message||d.error||'Server error')+'</div>';
+    banner('bad','❌','Verification failed', d.message||d.error||'Server error','', '');
     toast('Verification failed','err');
   }
   $('scan-result').innerHTML = box;
   loadTicker();
 }
+$('passcode').addEventListener('keydown', e => { if(e.key==='Enter') submitProof(); });
+$('serial').addEventListener('keydown', e => { if(e.key==='Enter') showProof($('serial').value.trim().toUpperCase()); });
+
+// deep link: scanned codes land here with ?serial=… (old /verify?serial=… also redirects here)
+(function(){
+  const s = (new URLSearchParams(location.search).get('serial')||'').trim().toUpperCase();
+  if(s){
+    scannedSerial = s;
+    $('serial').value = s;
+    showProof(s);
+  }
+})();
 
 // ---------- live ticker of recent purchase proofs ----------
 async function loadTicker(){
@@ -169,7 +267,7 @@ async function loadTicker(){
   const bl = await api('/api/brands');
   if(!bl.ok){ list.innerHTML='<div class="empty">Could not load brands.</div>'; return; }
   const brandsArr = bl.data.slice(0, 6);
-  if(!brandsArr.length){ list.innerHTML='<div class="empty">No brands yet — be the first business to <a href="/brands">create an account</a>.</div>'; return; }
+  if(!brandsArr.length){ list.innerHTML='<div class="empty">No brands yet — businesses can <a href="/dashboard">create an account</a> on the dashboard.</div>'; return; }
   const chunks = await Promise.all(brandsArr.map(b => api('/api/brands/'+encodeURIComponent(b.handle)+'/recent-scans')));
   let posts = [];
   chunks.forEach((r,i)=>{
