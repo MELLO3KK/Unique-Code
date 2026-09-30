@@ -50,9 +50,11 @@ def index():
 
 @app.route("/style.css")
 def style_css():
-    """The shared Twitter/X-style dark theme for every page."""
+    """The shared professional light SaaS theme for every page."""
     css_path = os.path.join(app.root_path, "templates", "theme.css")
-    return Response(open(css_path, encoding="utf-8").read(), mimetype="text/css")
+    return Response(open(css_path, encoding="utf-8").read(),
+                    mimetype="text/css",
+                    headers={"Cache-Control": "no-cache"})
 
 
 @app.route("/dashboard")
@@ -63,6 +65,59 @@ def dashboard():
         styles=dmcode.STYLES,
         max_bytes=dmcode.MAX_TEXT_BYTES,
     )
+
+
+@app.post("/api/dashboard/track")
+def track_code():
+    """Look up ANY code by its ID / serial so the dashboard can track it.
+
+    Searches, in order: an authenticity unit serial (the printed product
+    codes), then a brand product/copy id, then a plain unique id. Returns
+    `{kind, ...}` with the tracking info; 404 if nothing matches.
+    """
+    body = request.get_json(silent=True) or {}
+    q = (body.get("query") or "").strip()
+    if not q:
+        return jsonify(error="Enter a code ID or serial to track."), 400
+
+    # 1) authenticity unit — the serial encoded in printed product codes
+    try:
+        unit = authenticity.store.get_unit(q)
+        rows = []
+        for coll in (scans.store.all_rows(),
+                     scans.store.list_for_brand(unit["brand"], limit=100_000)):
+            for r in coll:
+                if r.get("serial") == unit["serial"] and r not in rows:
+                    rows.append(r)
+        rows.sort(key=lambda r: r.get("at", 0), reverse=True)
+        history = [{"at": r["at"], "result": r["result"],
+                    "customer": r.get("customer"), "ip": r.get("ip")}
+                   for r in rows[:50]]
+        return jsonify(kind="unit", unit=unit, scans=rows, history=history,
+                       image_url=f"/a/{unit['serial']}.png")
+    except authenticity.AuthenticityError:
+        pass
+
+    # 2) brand product code or a customer's personal copy
+    try:
+        prod = brands.store.get_product(q)
+        out = {"kind": "copy" if prod.get("is_copy") else "product",
+               "product": prod,
+               "image_url": f"/p/{prod['id']}.png"}
+        if not prod.get("is_copy"):
+            out["copies"] = brands.store.list_copies(prod["id"])
+        return jsonify(out)
+    except brands.BrandError:
+        pass
+
+    # 3) plain unique id
+    try:
+        rec = codes.store.get(q)
+        return jsonify(kind="unique", code=rec, image_url=f"/c/{rec['id']}.png")
+    except codes.CodeError:
+        pass
+
+    return jsonify(error=f"No code “{q}” found. Check the ID/serial and try again."), 404
 
 
 _OLD_PAGES = {"/brands": "/dashboard", "/create": "/dashboard",
